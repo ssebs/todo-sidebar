@@ -166,6 +166,9 @@ class KanbanViewProvider {
                         });
                     }
                     break;
+                case 'moveToParent':
+                    await this._handleMoveToParent(message.taskLine, message.parentLine, message.position);
+                    break;
             }
         });
         // Set up file watchers
@@ -271,6 +274,20 @@ class KanbanViewProvider {
         }
         catch (error) {
             console.error('Error moving task:', error);
+        }
+    }
+    async _handleMoveToParent(taskLine, parentLine, position = 'bottom') {
+        if (!this._activeFileUri) {
+            return;
+        }
+        try {
+            const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+            let text = Buffer.from(content).toString('utf-8');
+            text = (0, serializer_1.moveTaskToParent)(text, taskLine, parentLine, position);
+            await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+        }
+        catch (error) {
+            console.error('Error moving task to parent:', error);
         }
     }
     async _handleOpenAtLine(line) {
@@ -645,10 +662,10 @@ class KanbanViewProvider {
         });
       });
 
-      // SortableJS for drag and drop
+      // SortableJS for column-level tasks
       document.querySelectorAll('.tasks').forEach(taskList => {
         new Sortable(taskList, {
-          group: 'tasks',
+          group: 'shared',
           animation: 150,
           ghostClass: 'task-ghost',
           chosenClass: 'task-chosen',
@@ -656,11 +673,53 @@ class KanbanViewProvider {
           onEnd: (evt) => {
             const taskLine = parseInt(evt.item.dataset.line);
             const targetSection = evt.to.dataset.section;
+            const targetParentLine = evt.to.dataset.parentLine;
             const newIndex = evt.newIndex;
 
-            // Determine position based on drop location
-            const position = newIndex === 0 ? 'top' : 'bottom';
-            vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+            if (targetParentLine) {
+              // Dropped into a parent task's children area
+              vscode.postMessage({
+                type: 'moveToParent',
+                taskLine,
+                parentLine: parseInt(targetParentLine),
+                position: newIndex === 0 ? 'top' : 'bottom'
+              });
+            } else if (targetSection) {
+              // Dropped into a column
+              const position = newIndex === 0 ? 'top' : 'bottom';
+              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+            }
+          }
+        });
+      });
+
+      // SortableJS for child tasks within parent tasks
+      document.querySelectorAll('.children').forEach(childList => {
+        new Sortable(childList, {
+          group: 'shared',
+          animation: 150,
+          ghostClass: 'task-ghost',
+          chosenClass: 'task-chosen',
+          dragClass: 'task-drag',
+          onEnd: (evt) => {
+            const taskLine = parseInt(evt.item.dataset.line);
+            const targetSection = evt.to.dataset.section;
+            const targetParentLine = evt.to.dataset.parentLine;
+            const newIndex = evt.newIndex;
+
+            if (targetParentLine) {
+              // Dropped into a parent task's children area
+              vscode.postMessage({
+                type: 'moveToParent',
+                taskLine,
+                parentLine: parseInt(targetParentLine),
+                position: newIndex === 0 ? 'top' : 'bottom'
+              });
+            } else if (targetSection) {
+              // Promoted to column level (dragged out of parent)
+              const position = newIndex === 0 ? 'top' : 'bottom';
+              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+            }
           }
         });
       });
@@ -856,6 +915,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.serializeBoard = serializeBoard;
 exports.toggleTaskInContent = toggleTaskInContent;
 exports.moveTaskInContent = moveTaskInContent;
+exports.moveTaskToParent = moveTaskToParent;
 function serializeTask(task, indent = 0) {
     const lines = [];
     const prefix = ' '.repeat(indent);
@@ -989,6 +1049,109 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
         ...taskLines,
         '',
         ...newLines.slice(targetInsertIndex)
+    ];
+    // Clean up multiple consecutive empty lines
+    const cleaned = [];
+    let lastWasEmpty = false;
+    for (const resultLine of result) {
+        const isEmpty = resultLine.trim() === '';
+        if (isEmpty && lastWasEmpty) {
+            continue;
+        }
+        cleaned.push(resultLine);
+        lastWasEmpty = isEmpty;
+    }
+    return cleaned.join(lineEnding);
+}
+function moveTaskToParent(content, taskLine, parentLine, position = 'bottom') {
+    // Detect line ending style
+    const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+    const lines = content.split(/\r?\n/);
+    const taskIndex = taskLine - 1;
+    const parentIndex = parentLine - 1;
+    // Get the task line content
+    const taskContent = lines[taskIndex];
+    if (!taskContent) {
+        return content;
+    }
+    // Extract task text (remove leading whitespace, bullet, and checkbox)
+    const taskMatch = taskContent.match(/^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.+)$/);
+    if (!taskMatch) {
+        return content;
+    }
+    const checkboxPart = taskMatch[1] || '[ ]';
+    const taskText = taskMatch[2];
+    // Get the parent's indentation level
+    const parentContent = lines[parentIndex];
+    if (!parentContent) {
+        return content;
+    }
+    const parentIndent = parentContent.match(/^(\s*)/)?.[1].length ?? 0;
+    const childIndent = ' '.repeat(parentIndent + 2);
+    // Find all children of the task being moved (to move them too)
+    const taskLines = [];
+    const originalTaskIndent = taskContent.match(/^(\s*)/)?.[1].length ?? 0;
+    // The task itself, re-indented as a child
+    taskLines.push(`${childIndent}- ${checkboxPart} ${taskText}`);
+    // Find and re-indent any children of the moved task
+    let i = taskIndex + 1;
+    while (i < lines.length) {
+        const currentLine = lines[i];
+        const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+        if (currentLine.trim() === '') {
+            break;
+        }
+        if (currentIndent <= originalTaskIndent && currentLine.trim() !== '') {
+            break;
+        }
+        // Re-indent the child line
+        const childMatch = currentLine.match(/^(\s*)(.+)$/);
+        if (childMatch) {
+            const relativeIndent = currentIndent - originalTaskIndent;
+            const newIndent = ' '.repeat(parentIndent + 2 + relativeIndent);
+            taskLines.push(`${newIndent}${childMatch[2]}`);
+        }
+        i++;
+    }
+    // Remove the task (and its children) from original position
+    const originalTaskBlockLength = i - taskIndex;
+    // Calculate adjusted parent index after removal
+    let adjustedParentIndex = parentIndex;
+    if (taskIndex < parentIndex) {
+        adjustedParentIndex = parentIndex - originalTaskBlockLength;
+    }
+    // Remove task block
+    const beforeTask = lines.slice(0, taskIndex);
+    const afterTask = lines.slice(taskIndex + originalTaskBlockLength);
+    const newLines = [...beforeTask, ...afterTask];
+    // Find insertion point - right after the parent or at end of parent's children
+    let insertIndex;
+    const adjustedParentContent = newLines[adjustedParentIndex];
+    const adjustedParentIndent = adjustedParentContent?.match(/^(\s*)/)?.[1].length ?? 0;
+    if (position === 'top') {
+        // Insert right after parent line
+        insertIndex = adjustedParentIndex + 1;
+    }
+    else {
+        // Find end of parent's children
+        insertIndex = adjustedParentIndex + 1;
+        while (insertIndex < newLines.length) {
+            const currentLine = newLines[insertIndex];
+            const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+            if (currentLine.trim() === '') {
+                break;
+            }
+            if (currentIndent <= adjustedParentIndent) {
+                break;
+            }
+            insertIndex++;
+        }
+    }
+    // Insert the task lines
+    const result = [
+        ...newLines.slice(0, insertIndex),
+        ...taskLines,
+        ...newLines.slice(insertIndex)
     ];
     // Clean up multiple consecutive empty lines
     const cleaned = [];

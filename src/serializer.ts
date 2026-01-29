@@ -175,3 +175,128 @@ export function moveTaskInContent(
 
   return cleaned.join(lineEnding);
 }
+
+export function moveTaskToParent(
+  content: string,
+  taskLine: number,
+  parentLine: number,
+  position: 'top' | 'bottom' = 'bottom'
+): string {
+  // Detect line ending style
+  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  const taskIndex = taskLine - 1;
+  const parentIndex = parentLine - 1;
+
+  // Get the task line content
+  const taskContent = lines[taskIndex];
+  if (!taskContent) {
+    return content;
+  }
+
+  // Extract task text (remove leading whitespace, bullet, and checkbox)
+  const taskMatch = taskContent.match(/^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.+)$/);
+  if (!taskMatch) {
+    return content;
+  }
+  const checkboxPart = taskMatch[1] || '[ ]';
+  const taskText = taskMatch[2];
+
+  // Get the parent's indentation level
+  const parentContent = lines[parentIndex];
+  if (!parentContent) {
+    return content;
+  }
+  const parentIndent = parentContent.match(/^(\s*)/)?.[1].length ?? 0;
+  const childIndent = ' '.repeat(parentIndent + 2);
+
+  // Find all children of the task being moved (to move them too)
+  const taskLines: string[] = [];
+  const originalTaskIndent = taskContent.match(/^(\s*)/)?.[1].length ?? 0;
+
+  // The task itself, re-indented as a child
+  taskLines.push(`${childIndent}- ${checkboxPart} ${taskText}`);
+
+  // Find and re-indent any children of the moved task
+  let i = taskIndex + 1;
+  while (i < lines.length) {
+    const currentLine = lines[i];
+    const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+
+    if (currentLine.trim() === '') {
+      break;
+    }
+    if (currentIndent <= originalTaskIndent && currentLine.trim() !== '') {
+      break;
+    }
+
+    // Re-indent the child line
+    const childMatch = currentLine.match(/^(\s*)(.+)$/);
+    if (childMatch) {
+      const relativeIndent = currentIndent - originalTaskIndent;
+      const newIndent = ' '.repeat(parentIndent + 2 + relativeIndent);
+      taskLines.push(`${newIndent}${childMatch[2]}`);
+    }
+    i++;
+  }
+
+  // Remove the task (and its children) from original position
+  const originalTaskBlockLength = i - taskIndex;
+
+  // Calculate adjusted parent index after removal
+  let adjustedParentIndex = parentIndex;
+  if (taskIndex < parentIndex) {
+    adjustedParentIndex = parentIndex - originalTaskBlockLength;
+  }
+
+  // Remove task block
+  const beforeTask = lines.slice(0, taskIndex);
+  const afterTask = lines.slice(taskIndex + originalTaskBlockLength);
+  const newLines = [...beforeTask, ...afterTask];
+
+  // Find insertion point - right after the parent or at end of parent's children
+  let insertIndex: number;
+  const adjustedParentContent = newLines[adjustedParentIndex];
+  const adjustedParentIndent = adjustedParentContent?.match(/^(\s*)/)?.[1].length ?? 0;
+
+  if (position === 'top') {
+    // Insert right after parent line
+    insertIndex = adjustedParentIndex + 1;
+  } else {
+    // Find end of parent's children
+    insertIndex = adjustedParentIndex + 1;
+    while (insertIndex < newLines.length) {
+      const currentLine = newLines[insertIndex];
+      const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+
+      if (currentLine.trim() === '') {
+        break;
+      }
+      if (currentIndent <= adjustedParentIndent) {
+        break;
+      }
+      insertIndex++;
+    }
+  }
+
+  // Insert the task lines
+  const result = [
+    ...newLines.slice(0, insertIndex),
+    ...taskLines,
+    ...newLines.slice(insertIndex)
+  ];
+
+  // Clean up multiple consecutive empty lines
+  const cleaned: string[] = [];
+  let lastWasEmpty = false;
+  for (const resultLine of result) {
+    const isEmpty = resultLine.trim() === '';
+    if (isEmpty && lastWasEmpty) {
+      continue;
+    }
+    cleaned.push(resultLine);
+    lastWasEmpty = isEmpty;
+  }
+
+  return cleaned.join(lineEnding);
+}

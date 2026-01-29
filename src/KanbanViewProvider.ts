@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { parseMarkdown, Board, Task, Column } from './parser';
-import { toggleTaskInContent, moveTaskInContent } from './serializer';
+import { toggleTaskInContent, moveTaskInContent, moveTaskToParent } from './serializer';
 
 export class KanbanViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'todoSidebar.kanbanView';
@@ -47,6 +47,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
               taskLine: message.line
             });
           }
+          break;
+        case 'moveToParent':
+          await this._handleMoveToParent(message.taskLine, message.parentLine, message.position);
           break;
       }
     });
@@ -171,6 +174,21 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
     } catch (error) {
       console.error('Error moving task:', error);
+    }
+  }
+
+  private async _handleMoveToParent(taskLine: number, parentLine: number, position: 'top' | 'bottom' = 'bottom') {
+    if (!this._activeFileUri) {
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+      let text = Buffer.from(content).toString('utf-8');
+      text = moveTaskToParent(text, taskLine, parentLine, position);
+      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+    } catch (error) {
+      console.error('Error moving task to parent:', error);
     }
   }
 
@@ -548,10 +566,10 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         });
       });
 
-      // SortableJS for drag and drop
+      // SortableJS for column-level tasks
       document.querySelectorAll('.tasks').forEach(taskList => {
         new Sortable(taskList, {
-          group: 'tasks',
+          group: 'shared',
           animation: 150,
           ghostClass: 'task-ghost',
           chosenClass: 'task-chosen',
@@ -559,11 +577,53 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           onEnd: (evt) => {
             const taskLine = parseInt(evt.item.dataset.line);
             const targetSection = evt.to.dataset.section;
+            const targetParentLine = evt.to.dataset.parentLine;
             const newIndex = evt.newIndex;
 
-            // Determine position based on drop location
-            const position = newIndex === 0 ? 'top' : 'bottom';
-            vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+            if (targetParentLine) {
+              // Dropped into a parent task's children area
+              vscode.postMessage({
+                type: 'moveToParent',
+                taskLine,
+                parentLine: parseInt(targetParentLine),
+                position: newIndex === 0 ? 'top' : 'bottom'
+              });
+            } else if (targetSection) {
+              // Dropped into a column
+              const position = newIndex === 0 ? 'top' : 'bottom';
+              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+            }
+          }
+        });
+      });
+
+      // SortableJS for child tasks within parent tasks
+      document.querySelectorAll('.children').forEach(childList => {
+        new Sortable(childList, {
+          group: 'shared',
+          animation: 150,
+          ghostClass: 'task-ghost',
+          chosenClass: 'task-chosen',
+          dragClass: 'task-drag',
+          onEnd: (evt) => {
+            const taskLine = parseInt(evt.item.dataset.line);
+            const targetSection = evt.to.dataset.section;
+            const targetParentLine = evt.to.dataset.parentLine;
+            const newIndex = evt.newIndex;
+
+            if (targetParentLine) {
+              // Dropped into a parent task's children area
+              vscode.postMessage({
+                type: 'moveToParent',
+                taskLine,
+                parentLine: parseInt(targetParentLine),
+                position: newIndex === 0 ? 'top' : 'bottom'
+              });
+            } else if (targetSection) {
+              // Promoted to column level (dragged out of parent)
+              const position = newIndex === 0 ? 'top' : 'bottom';
+              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+            }
           }
         });
       });
