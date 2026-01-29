@@ -1,0 +1,601 @@
+import * as vscode from 'vscode';
+import { parseMarkdown, Board, Task, Column } from './parser';
+import { toggleTaskInContent, moveTaskInContent } from './serializer';
+
+export class KanbanViewProvider implements vscode.WebviewViewProvider {
+  public static readonly viewType = 'todoSidebar.kanbanView';
+
+  private _view?: vscode.WebviewView;
+  private _activeFileUri?: vscode.Uri;
+  private _board?: Board;
+  private _disposables: vscode.Disposable[] = [];
+
+  constructor(private readonly _extensionUri: vscode.Uri) {}
+
+  public resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken
+  ) {
+    this._view = webviewView;
+
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this._extensionUri]
+    };
+
+    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+
+    // Handle messages from webview
+    webviewView.webview.onDidReceiveMessage(async (message) => {
+      switch (message.type) {
+        case 'toggle':
+          await this._handleToggle(message.line, message.checked, message.targetColumn);
+          break;
+        case 'move':
+          await this._handleMove(message.taskLine, message.targetSection, message.position);
+          break;
+        case 'openAtLine':
+          await this._handleOpenAtLine(message.line);
+          break;
+        case 'getColumns':
+          // Send column list back to webview for the picker
+          if (this._board) {
+            this._view?.webview.postMessage({
+              type: 'columnsForPicker',
+              columns: this._board.columns.map(c => ({ title: c.title, isDoneColumn: c.isDoneColumn })),
+              taskLine: message.line
+            });
+          }
+          break;
+      }
+    });
+
+    // Set up file watchers
+    this._setupFileWatchers();
+  }
+
+  private _setupFileWatchers() {
+    // Watch for text document changes
+    this._disposables.push(
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        if (this._activeFileUri && e.document.uri.toString() === this._activeFileUri.toString()) {
+          this._refresh();
+        }
+      })
+    );
+
+    // Watch for file system changes
+    const watcher = vscode.workspace.createFileSystemWatcher('**/*.md');
+    this._disposables.push(
+      watcher.onDidChange((uri) => {
+        if (this._activeFileUri && uri.toString() === this._activeFileUri.toString()) {
+          this._refresh();
+        }
+      })
+    );
+    this._disposables.push(watcher);
+  }
+
+  public async setActiveFile(uri: vscode.Uri) {
+    this._activeFileUri = uri;
+    await this._refresh();
+  }
+
+  public async refresh() {
+    await this._refresh();
+  }
+
+  private async _refresh() {
+    if (!this._activeFileUri || !this._view) {
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+      const text = Buffer.from(content).toString('utf-8');
+      this._board = parseMarkdown(text);
+      this._view.webview.postMessage({ type: 'update', board: this._board });
+    } catch (error) {
+      console.error('Error refreshing kanban board:', error);
+    }
+  }
+
+  private async _handleToggle(line: number, checked: boolean, targetColumn?: string) {
+    if (!this._activeFileUri || !this._board) {
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+      let text = Buffer.from(content).toString('utf-8');
+
+      // Toggle the checkbox
+      text = toggleTaskInContent(text, line, checked);
+
+      if (checked) {
+        // If checked, move to Done column at TOP
+        const doneColumn = this._board.columns.find((c) => c.isDoneColumn);
+        if (doneColumn) {
+          const currentColumn = this._findTaskColumn(line);
+          if (currentColumn && !currentColumn.isDoneColumn) {
+            text = moveTaskInContent(text, line, doneColumn.title, 'top');
+          }
+        }
+      } else if (targetColumn) {
+        // If unchecked and a target column is specified, move there at TOP
+        text = moveTaskInContent(text, line, targetColumn, 'top');
+      }
+
+      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+    } catch (error) {
+      console.error('Error toggling task:', error);
+    }
+  }
+
+  private _findTaskColumn(line: number): Column | undefined {
+    if (!this._board) {
+      return undefined;
+    }
+
+    const findInTasks = (tasks: Task[]): boolean => {
+      for (const task of tasks) {
+        if (task.line === line) {
+          return true;
+        }
+        if (findInTasks(task.children)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    for (const column of this._board.columns) {
+      if (findInTasks(column.tasks)) {
+        return column;
+      }
+    }
+
+    return undefined;
+  }
+
+  private async _handleMove(taskLine: number, targetSection: string, position: 'top' | 'bottom' = 'bottom') {
+    if (!this._activeFileUri) {
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+      let text = Buffer.from(content).toString('utf-8');
+      text = moveTaskInContent(text, taskLine, targetSection, position);
+      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+    } catch (error) {
+      console.error('Error moving task:', error);
+    }
+  }
+
+  private async _handleOpenAtLine(line: number) {
+    if (!this._activeFileUri) {
+      return;
+    }
+
+    try {
+      const document = await vscode.workspace.openTextDocument(this._activeFileUri);
+      const editor = await vscode.window.showTextDocument(document);
+      const position = new vscode.Position(line - 1, 0);
+      editor.selection = new vscode.Selection(position, position);
+      editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+    } catch (error) {
+      console.error('Error opening file at line:', error);
+    }
+  }
+
+  private _getHtmlForWebview(webview: vscode.Webview): string {
+    const nonce = getNonce();
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Board</title>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <style>
+    body {
+      padding: 8px;
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      color: var(--vscode-foreground);
+      background: var(--vscode-sideBar-background);
+    }
+    .no-file {
+      text-align: center;
+      padding: 20px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .board {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .board-header {
+      margin-bottom: 8px;
+    }
+    .board-title {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin: 0 0 4px 0;
+    }
+    .board-description {
+      font-size: 0.9em;
+      color: var(--vscode-descriptionForeground);
+      margin: 0;
+    }
+    .column {
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 4px;
+      padding: 8px;
+    }
+    .column-header {
+      font-weight: bold;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .column.drag-over {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .task {
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 3px;
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      cursor: grab;
+    }
+    .task:last-child {
+      margin-bottom: 0;
+    }
+    .task.dragging {
+      opacity: 0.5;
+    }
+    .task-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .task-checkbox {
+      margin-top: 2px;
+      cursor: pointer;
+    }
+    .task-text {
+      flex: 1;
+      word-break: break-word;
+    }
+    .task-text.checked {
+      text-decoration: line-through;
+      opacity: 0.7;
+    }
+    .open-btn {
+      background: none;
+      border: none;
+      color: var(--vscode-textLink-foreground);
+      cursor: pointer;
+      padding: 2px 4px;
+      font-size: 0.85em;
+      opacity: 0.7;
+    }
+    .open-btn:hover {
+      opacity: 1;
+    }
+    .children {
+      margin-left: 20px;
+      margin-top: 4px;
+      font-size: 0.9em;
+      color: var(--vscode-descriptionForeground);
+    }
+    .child-item {
+      margin: 2px 0;
+    }
+    .children {
+      min-height: 10px;
+    }
+    .child-task {
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 3px;
+      padding: 4px 6px;
+      margin: 4px 0;
+      cursor: grab;
+      font-size: 0.9em;
+    }
+    .child-task .task-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 4px;
+    }
+    .child-task .task-checkbox {
+      margin-top: 1px;
+    }
+    .child-task .open-btn {
+      font-size: 0.8em;
+      padding: 1px 3px;
+    }
+    .child-task.task-ghost {
+      opacity: 0.4;
+      background: var(--vscode-list-activeSelectionBackground);
+      border: 2px dashed var(--vscode-focusBorder);
+    }
+    /* SortableJS styles */
+    .task-ghost {
+      opacity: 0.4;
+      background: var(--vscode-list-activeSelectionBackground);
+      border: 2px dashed var(--vscode-focusBorder);
+    }
+    .task-chosen {
+      background: var(--vscode-list-activeSelectionBackground);
+      border-color: var(--vscode-focusBorder);
+    }
+    .task-drag {
+      opacity: 1;
+      background: var(--vscode-list-activeSelectionBackground);
+    }
+    .tasks {
+      min-height: 20px;
+    }
+    .sortable-placeholder {
+      height: 40px;
+      background: var(--vscode-list-hoverBackground);
+      border: 2px dashed var(--vscode-focusBorder);
+      border-radius: 3px;
+      margin-bottom: 6px;
+    }
+    /* Column picker modal */
+    .column-picker-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .column-picker {
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 6px;
+      padding: 12px;
+      min-width: 200px;
+      max-width: 300px;
+    }
+    .column-picker-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .column-picker-option {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      margin: 4px 0;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 3px;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      text-align: left;
+    }
+    .column-picker-option:hover {
+      background: var(--vscode-list-hoverBackground);
+      border-color: var(--vscode-focusBorder);
+    }
+    .column-picker-cancel {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      margin-top: 8px;
+      background: transparent;
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 3px;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      text-align: center;
+    }
+    .column-picker-cancel:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+  </style>
+</head>
+<body>
+  <div id="content">
+    <div class="no-file">
+      Open a markdown file to view your todo board.<br>
+      Use the command "Todo Sidebar: Open Markdown File"
+    </div>
+  </div>
+
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    let board = null;
+
+    function renderChildTask(child, isDoneColumn) {
+      return \`
+        <div class="child-task" draggable="true" data-line="\${child.line}" data-in-done="\${isDoneColumn}">
+          <div class="task-header">
+            <input type="checkbox" class="task-checkbox" \${child.checked ? 'checked' : ''} data-line="\${child.line}" data-in-done="\${isDoneColumn}">
+            <span class="task-text \${child.checked ? 'checked' : ''}">\${escapeHtml(child.text)}</span>
+            <button class="open-btn" data-line="\${child.line}" title="Open in editor">↗</button>
+          </div>
+        </div>
+      \`;
+    }
+
+    function renderTask(task, isDoneColumn = false) {
+      const children = task.children.map(child => renderChildTask(child, isDoneColumn)).join('');
+
+      return \`
+        <div class="task" draggable="true" data-line="\${task.line}" data-in-done="\${isDoneColumn}">
+          <div class="task-header">
+            <input type="checkbox" class="task-checkbox" \${task.checked ? 'checked' : ''} data-line="\${task.line}" data-in-done="\${isDoneColumn}">
+            <span class="task-text \${task.checked ? 'checked' : ''}">\${escapeHtml(task.text)}</span>
+            <button class="open-btn" data-line="\${task.line}" title="Open in editor">↗</button>
+          </div>
+          <div class="children" data-parent-line="\${task.line}">\${children}</div>
+        </div>
+      \`;
+    }
+
+    function renderColumn(column) {
+      const tasks = column.tasks.map(task => renderTask(task, column.isDoneColumn)).join('');
+      return \`
+        <div class="column" data-section="\${escapeHtml(column.title)}" data-is-done="\${column.isDoneColumn}">
+          <div class="column-header">\${escapeHtml(column.title)}</div>
+          <div class="tasks" data-section="\${escapeHtml(column.title)}">\${tasks}</div>
+        </div>
+      \`;
+    }
+
+    function renderBoard(board) {
+      if (!board || !board.columns || board.columns.length === 0) {
+        return '<div class="no-file">No columns found in the markdown file.</div>';
+      }
+
+      const columns = board.columns.map(col => renderColumn(col)).join('');
+      return \`
+        <div class="board-header">
+          \${board.title ? '<h2 class="board-title">' + escapeHtml(board.title) + '</h2>' : ''}
+          \${board.description ? '<p class="board-description">' + escapeHtml(board.description) + '</p>' : ''}
+        </div>
+        <div class="board">\${columns}</div>
+      \`;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function updateUI() {
+      document.getElementById('content').innerHTML = renderBoard(board);
+      setupEventListeners();
+    }
+
+    let pendingUncheckLine = null;
+
+    function showColumnPicker(columns, taskLine) {
+      // Filter out the Done column - user shouldn't move back to Done
+      const availableColumns = columns.filter(c => !c.isDoneColumn);
+
+      const overlay = document.createElement('div');
+      overlay.className = 'column-picker-overlay';
+      overlay.innerHTML = \`
+        <div class="column-picker">
+          <div class="column-picker-title">Move task to:</div>
+          \${availableColumns.map(c => \`
+            <button class="column-picker-option" data-column="\${escapeHtml(c.title)}">\${escapeHtml(c.title)}</button>
+          \`).join('')}
+          <button class="column-picker-cancel">Cancel</button>
+        </div>
+      \`;
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target.classList.contains('column-picker-option')) {
+          const targetColumn = e.target.dataset.column;
+          vscode.postMessage({ type: 'toggle', line: taskLine, checked: false, targetColumn });
+          overlay.remove();
+        } else if (e.target.classList.contains('column-picker-cancel') || e.target === overlay) {
+          // Cancel - revert the checkbox
+          const checkbox = document.querySelector(\`.task-checkbox[data-line="\${taskLine}"]\`);
+          if (checkbox) checkbox.checked = true;
+          overlay.remove();
+        }
+      });
+
+      document.body.appendChild(overlay);
+    }
+
+    function setupEventListeners() {
+      // Checkboxes
+      document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+          const line = parseInt(e.target.dataset.line);
+          const checked = e.target.checked;
+          const inDone = e.target.dataset.inDone === 'true';
+
+          if (!checked && inDone) {
+            // Unchecking in Done column - show column picker
+            pendingUncheckLine = line;
+            vscode.postMessage({ type: 'getColumns', line });
+          } else {
+            // Normal toggle
+            vscode.postMessage({ type: 'toggle', line, checked });
+          }
+        });
+      });
+
+      // Open buttons
+      document.querySelectorAll('.open-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const line = parseInt(e.target.dataset.line);
+          vscode.postMessage({ type: 'openAtLine', line });
+        });
+      });
+
+      // SortableJS for drag and drop
+      document.querySelectorAll('.tasks').forEach(taskList => {
+        new Sortable(taskList, {
+          group: 'tasks',
+          animation: 150,
+          ghostClass: 'task-ghost',
+          chosenClass: 'task-chosen',
+          dragClass: 'task-drag',
+          onEnd: (evt) => {
+            const taskLine = parseInt(evt.item.dataset.line);
+            const targetSection = evt.to.dataset.section;
+            const newIndex = evt.newIndex;
+
+            // Determine position based on drop location
+            const position = newIndex === 0 ? 'top' : 'bottom';
+            vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+          }
+        });
+      });
+    }
+
+    // Handle messages from extension
+    window.addEventListener('message', (event) => {
+      const message = event.data;
+      if (message.type === 'update') {
+        board = message.board;
+        updateUI();
+      } else if (message.type === 'columnsForPicker') {
+        showColumnPicker(message.columns, message.taskLine);
+      }
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  public dispose() {
+    for (const disposable of this._disposables) {
+      disposable.dispose();
+    }
+  }
+}
+
+function getNonce() {
+  let text = '';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}

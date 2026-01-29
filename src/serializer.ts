@@ -1,0 +1,177 @@
+import { Board, Task, Column } from './parser';
+
+function serializeTask(task: Task, indent: number = 0): string[] {
+  const lines: string[] = [];
+  const prefix = ' '.repeat(indent);
+  const checkbox = task.checked ? '[x]' : '[ ]';
+  lines.push(`${prefix}- ${checkbox} ${task.text}`);
+
+  for (const child of task.children) {
+    lines.push(...serializeTask(child, indent + 2));
+  }
+
+  return lines;
+}
+
+function serializeColumn(column: Column): string[] {
+  const lines: string[] = [];
+  lines.push(`## ${column.title}`);
+  lines.push('');
+
+  for (const task of column.tasks) {
+    lines.push(...serializeTask(task));
+  }
+
+  lines.push('');
+  return lines;
+}
+
+export function serializeBoard(board: Board): string {
+  const lines: string[] = [];
+
+  if (board.title) {
+    lines.push(`# ${board.title}`);
+    lines.push('');
+  }
+
+  if (board.description) {
+    const descLines = board.description.split('\n');
+    for (const descLine of descLines) {
+      lines.push(`> ${descLine}`);
+    }
+    lines.push('');
+  }
+
+  for (const column of board.columns) {
+    lines.push(...serializeColumn(column));
+  }
+
+  return lines.join('\n');
+}
+
+export function toggleTaskInContent(content: string, line: number, checked: boolean): string {
+  // Detect line ending style
+  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  const lineIndex = line - 1; // Convert to 0-indexed
+
+  if (lineIndex >= 0 && lineIndex < lines.length) {
+    const currentLine = lines[lineIndex];
+    if (checked) {
+      // Handle markdown checkboxes: - [ ] or * [ ]
+      let newLine = currentLine.replace(/([-*]\s+)\[ \]/, '$1[x]');
+      // Handle unicode checkboxes: ☐ -> ☑
+      newLine = newLine.replace(/([-*]\s+)☐/, '$1☑');
+      lines[lineIndex] = newLine;
+    } else {
+      // Handle markdown checkboxes: - [x] or * [x]
+      let newLine = currentLine.replace(/([-*]\s+)\[[xX]\]/, '$1[ ]');
+      // Handle unicode checkboxes: ☑ or ✓ -> ☐
+      newLine = newLine.replace(/([-*]\s+)[☑✓]/, '$1☐');
+      lines[lineIndex] = newLine;
+    }
+  }
+
+  return lines.join(lineEnding);
+}
+
+export function moveTaskInContent(
+  content: string,
+  taskLine: number,
+  targetSectionTitle: string,
+  position: 'top' | 'bottom' = 'bottom'
+): string {
+  // Detect line ending style
+  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  const lineIndex = taskLine - 1;
+
+  // Find the task and all its children (indented lines below it)
+  const taskLines: string[] = [];
+  const taskIndent = lines[lineIndex]?.match(/^(\s*)/)?.[1].length ?? 0;
+
+  // Add the task line
+  taskLines.push(lines[lineIndex]);
+
+  // Add all children (lines with greater indentation following the task)
+  let i = lineIndex + 1;
+  while (i < lines.length) {
+    const currentLine = lines[i];
+    const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+
+    // Empty line or line with content at same/less indentation ends the block
+    if (currentLine.trim() === '') {
+      break;
+    }
+    if (currentIndent <= taskIndent && currentLine.trim() !== '') {
+      break;
+    }
+
+    taskLines.push(currentLine);
+    i++;
+  }
+
+  // Remove the task block from original position
+  const beforeTask = lines.slice(0, lineIndex);
+  const afterTask = lines.slice(lineIndex + taskLines.length);
+  const newLines = [...beforeTask, ...afterTask];
+
+  // Find the target section and insert at top or bottom
+  let targetInsertIndex = -1;
+  for (let j = 0; j < newLines.length; j++) {
+    const sectionMatch = newLines[j].match(/^##\s+(.+)$/);
+    if (sectionMatch) {
+      // Compare section titles (normalize by trimming)
+      const sectionTitle = sectionMatch[1].trim();
+      if (sectionTitle === targetSectionTitle || sectionTitle.startsWith(targetSectionTitle)) {
+        if (position === 'top') {
+          // Insert right after the section header (skip empty lines)
+          let insertAfterHeader = j + 1;
+          while (insertAfterHeader < newLines.length && newLines[insertAfterHeader].trim() === '') {
+            insertAfterHeader++;
+          }
+          targetInsertIndex = insertAfterHeader;
+        } else {
+          // Find the end of this section (next ## or end of file)
+          let endOfSection = j + 1;
+          while (endOfSection < newLines.length) {
+            if (newLines[endOfSection].match(/^##\s+/)) {
+              break;
+            }
+            endOfSection++;
+          }
+          // Insert before the next section or at end
+          targetInsertIndex = endOfSection;
+        }
+        break;
+      }
+    }
+  }
+
+  if (targetInsertIndex === -1) {
+    // Target section not found, return unchanged
+    return content;
+  }
+
+  // Insert task lines at the target position
+  const result = [
+    ...newLines.slice(0, targetInsertIndex),
+    ...taskLines,
+    '',
+    ...newLines.slice(targetInsertIndex)
+  ];
+
+  // Clean up multiple consecutive empty lines
+  const cleaned: string[] = [];
+  let lastWasEmpty = false;
+  for (const resultLine of result) {
+    const isEmpty = resultLine.trim() === '';
+    if (isEmpty && lastWasEmpty) {
+      continue;
+    }
+    cleaned.push(resultLine);
+    lastWasEmpty = isEmpty;
+  }
+
+  return cleaned.join(lineEnding);
+}
