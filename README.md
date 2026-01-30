@@ -20,6 +20,10 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - You can move this panel to the right by dragging it over
 
 
+## TODO
+- Add tasks to section from editor
+- Edit text from tasks & save/sync
+
 ## Markdown Format
 
 ```md
