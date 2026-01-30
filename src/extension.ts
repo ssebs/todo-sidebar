@@ -7,7 +7,7 @@ export function activate(context: vscode.ExtensionContext) {
 	console.log('Todo Sidebar extension is now active!');
 
 	// Create and register the webview provider
-	kanbanProvider = new KanbanViewProvider(context.extensionUri);
+	kanbanProvider = new KanbanViewProvider(context);
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
 			KanbanViewProvider.viewType,

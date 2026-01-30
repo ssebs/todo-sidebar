@@ -1,16 +1,48 @@
-# To-Do Sidebar
+# Todo Sidebar
 
-A vscode extension to have Markdown/todo file in secondary side bar
+A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed directly from Markdown files.
 
-## Problem
+## Features
 
-The secondary sidebar needs to have a specific "View" in it to be used.
+- **Markdown-powered** - Your todos live in plain `.md` files, not a proprietary format
+- **Kanban board view** - Visualize tasks across columns defined by `## Headers`
+- **Drag and drop** - Move tasks between columns or nest them under parent tasks
+- **Checkbox support** - Works with `- [ ]`/`- [x]` and unicode `☐`/`☑` checkboxes
+- **Auto-move to Done** - Checking a task automatically moves it to your Done column
+- **Nested tasks** - Support for subtasks and plain bullet children
+- **Live sync** - Changes in the editor instantly update the board and vice versa
 
-You can't just drag a text file to that panel.
+## Usage
+- Open the **Todo Board panel** in the sidebar
+- Run command: **Todo Sidebar: Open Markdown File**
+- Select your markdown file
+- Drag tasks between columns, check/uncheck to toggle status
+- You can move this panel to the right by dragging it over
 
-# Bugs
 
-- \+ Add a task
+## Markdown Format
+
+```md
+# Board Title
+
+> Optional description
+
+## In Progress
+
+- [ ] Task 1
+  - [ ] Subtask
+  - Plain bullet note
+- [x] Completed task
+
+## Done
+
+- [x] Finished item
+
+
+
+## TODO
+- Add new task from extension
+- Edit text on text click
 
 ### Kanban planning format
 

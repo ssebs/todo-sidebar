@@ -47,7 +47,7 @@ let kanbanProvider;
 function activate(context) {
     console.log('Todo Sidebar extension is now active!');
     // Create and register the webview provider
-    kanbanProvider = new KanbanViewProvider_1.KanbanViewProvider(context.extensionUri);
+    kanbanProvider = new KanbanViewProvider_1.KanbanViewProvider(context);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(KanbanViewProvider_1.KanbanViewProvider.viewType, kanbanProvider));
     // Register open file command
     const openFileCommand = vscode.commands.registerCommand('todoSidebar.openFile', async () => {
@@ -128,20 +128,20 @@ const vscode = __importStar(__webpack_require__(1));
 const parser_1 = __webpack_require__(3);
 const serializer_1 = __webpack_require__(4);
 class KanbanViewProvider {
-    _extensionUri;
+    _context;
     static viewType = 'todoSidebar.kanbanView';
     _view;
     _activeFileUri;
     _board;
     _disposables = [];
-    constructor(_extensionUri) {
-        this._extensionUri = _extensionUri;
+    constructor(_context) {
+        this._context = _context;
     }
     resolveWebviewView(webviewView, _context, _token) {
         this._view = webviewView;
         webviewView.webview.options = {
             enableScripts: true,
-            localResourceRoots: [this._extensionUri]
+            localResourceRoots: [this._context.extensionUri]
         };
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
         // Handle messages from webview
@@ -173,6 +173,13 @@ class KanbanViewProvider {
         });
         // Set up file watchers
         this._setupFileWatchers();
+        // Restore previously selected file
+        const savedUri = this._context.workspaceState.get('todoSidebar.activeFile');
+        console.log('Restoring saved URI:', savedUri);
+        if (savedUri) {
+            this._activeFileUri = vscode.Uri.parse(savedUri);
+            this._refresh();
+        }
     }
     _setupFileWatchers() {
         // Watch for text document changes
@@ -192,6 +199,8 @@ class KanbanViewProvider {
     }
     async setActiveFile(uri) {
         this._activeFileUri = uri;
+        console.log('Saving active file:', uri.toString());
+        await this._context.workspaceState.update('todoSidebar.activeFile', uri.toString());
         await this._refresh();
     }
     async refresh() {

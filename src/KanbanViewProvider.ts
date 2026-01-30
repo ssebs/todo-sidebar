@@ -10,7 +10,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   private _board?: Board;
   private _disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(private readonly _context: vscode.ExtensionContext) {}
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -21,7 +21,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [this._extensionUri]
+      localResourceRoots: [this._context.extensionUri]
     };
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
@@ -56,6 +56,14 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
     // Set up file watchers
     this._setupFileWatchers();
+
+    // Restore previously selected file
+    const savedUri = this._context.workspaceState.get<string>('todoSidebar.activeFile');
+    console.log('Restoring saved URI:', savedUri);
+    if (savedUri) {
+      this._activeFileUri = vscode.Uri.parse(savedUri);
+      this._refresh();
+    }
   }
 
   private _setupFileWatchers() {
@@ -82,6 +90,8 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
   public async setActiveFile(uri: vscode.Uri) {
     this._activeFileUri = uri;
+    console.log('Saving active file:', uri.toString());
+    await this._context.workspaceState.update('todoSidebar.activeFile', uri.toString());
     await this._refresh();
   }
 

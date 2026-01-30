@@ -16,5 +16,6 @@
 
 ## Done ✅
 
-- [x] Create this example MD
 - [x] A second thing
+
+- [x] Create this example MD
