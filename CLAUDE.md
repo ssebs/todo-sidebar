@@ -5,11 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-npm run compile      # Build with webpack
-npm run watch        # Build and watch for changes
-npm run lint         # Run ESLint on src/
-npm run test         # Run tests (requires compile-tests first)
-npm run package      # Production build
+npm run compile        # Build with webpack
+npm run watch          # Build and watch for changes
+npm run lint           # Run ESLint on src/
+npm run compile-tests  # Compile tests to out/ directory
+npm run test           # Run tests (runs compile-tests, compile, lint first via pretest)
+npm run package        # Production build
 ```
 
 ## Testing the Extension
@@ -28,7 +29,8 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
   - Inline HTML/CSS/JS for the webview UI (no separate frontend files)
   - Message handlers for webview-to-extension communication (`toggle`, `move`, `moveToParent`, `getColumns`, `openAtLine`)
   - File watchers to auto-refresh when the markdown file changes
-  - Uses SortableJS (loaded from CDN) for drag-and-drop with `group: 'shared'` allowing tasks to move between columns and in/out of parent tasks
+  - Uses SortableJS (loaded from CDN: `cdn.jsdelivr.net`) for drag-and-drop with `group: 'shared'` allowing tasks to move between columns and in/out of parent tasks
+  - CSP configured to allow scripts from jsdelivr CDN
 
 - **parser.ts** - Parses markdown into a `Board` structure. Handles:
   - `# Title` for board title
@@ -55,10 +57,14 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
 ### Key Types (parser.ts)
 
 ```typescript
-interface Task { text: string; checked: boolean; line: number; children: Task[]; }
+interface Task { text: string; checked: boolean; line: number; children: Task[]; hasCheckbox: boolean; }
 interface Column { title: string; line: number; isDoneColumn: boolean; tasks: Task[]; }
 interface Board { title: string; description: string; columns: Column[]; }
 ```
+
+### State Persistence
+
+The selected markdown file URI is persisted via `context.workspaceState` under the key `todoSidebar.activeFile`, allowing the extension to restore the board on reload.
 
 ### Markdown Format
 
