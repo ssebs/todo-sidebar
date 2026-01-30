@@ -4,16 +4,19 @@
 
 ## In Progress 🚀
 
-- [ ] do the mvp
-
-- [ ] create the extension
+- [ ] Create the extension
   - [ ] start the readme
+  - [ ] New taskk
 
 - [ ] New thing 1
   - [ ] item
   - [ ] yes
 
+- [ ] do the mvp
+
 ## Backlog 📋
+
+- [ ] New task
 
 - [ ] Make it good
   - > really good
