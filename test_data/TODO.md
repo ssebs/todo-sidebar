@@ -4,10 +4,10 @@
 
 ## In Progress 🚀
 
-- [ ] start the readme
-
 - [ ] create the extension
-  - [ ] do the mvp
+  - [ ] start the readme
+
+- [ ] do the mvp
 
 ## Backlog 📋
 

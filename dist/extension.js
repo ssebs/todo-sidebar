@@ -822,7 +822,8 @@ function parseMarkdown(content) {
                 text,
                 checked,
                 line: lineNumber,
-                children: []
+                children: [],
+                hasCheckbox: true
             };
             // Find parent based on indentation
             while (taskStack.length > 0 && taskStack[taskStack.length - 1].indent >= indent) {
@@ -850,7 +851,8 @@ function parseMarkdown(content) {
                 text,
                 checked,
                 line: lineNumber,
-                children: []
+                children: [],
+                hasCheckbox: true
             };
             while (taskStack.length > 0 && taskStack[taskStack.length - 1].indent >= indent) {
                 taskStack.pop();
@@ -872,7 +874,8 @@ function parseMarkdown(content) {
                 text,
                 checked: false,
                 line: lineNumber,
-                children: []
+                children: [],
+                hasCheckbox: false
             };
             // Add to most recent task
             taskStack[taskStack.length - 1].task.children.push(childTask);
@@ -891,7 +894,8 @@ function parseMarkdown(content) {
                 text,
                 checked: false,
                 line: lineNumber,
-                children: []
+                children: [],
+                hasCheckbox: false
             };
             // Find appropriate parent based on indentation
             while (taskStack.length > 1 && taskStack[taskStack.length - 1].indent >= indent) {
@@ -1003,6 +1007,13 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
         taskLines.push(currentLine);
         i++;
     }
+    // De-indent the task block to become top-level
+    const deindentedLines = taskLines.map(line => {
+        if (line.startsWith(' '.repeat(taskIndent))) {
+            return line.slice(taskIndent);
+        }
+        return line;
+    });
     // Remove the task block from original position
     const beforeTask = lines.slice(0, lineIndex);
     const afterTask = lines.slice(lineIndex + taskLines.length);
@@ -1046,7 +1057,7 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
     // Insert task lines at the target position
     const result = [
         ...newLines.slice(0, targetInsertIndex),
-        ...taskLines,
+        ...deindentedLines,
         '',
         ...newLines.slice(targetInsertIndex)
     ];

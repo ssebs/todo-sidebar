@@ -10,9 +10,7 @@ You can't just drag a text file to that panel.
 
 # Bugs
 
-- Open file once, and load/save it
-- nested items cant be moved out (almost works but not)
-  - nested checkboxes only should be movable out of the nesting
+- \+ Add a task
 
 ### Kanban planning format
 

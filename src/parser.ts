@@ -3,6 +3,7 @@ export interface Task {
   checked: boolean;
   line: number;
   children: Task[];
+  hasCheckbox: boolean;
 }
 
 export interface Column {
@@ -83,7 +84,8 @@ export function parseMarkdown(content: string): Board {
         text,
         checked,
         line: lineNumber,
-        children: []
+        children: [],
+        hasCheckbox: true
       };
 
       // Find parent based on indentation
@@ -115,7 +117,8 @@ export function parseMarkdown(content: string): Board {
         text,
         checked,
         line: lineNumber,
-        children: []
+        children: [],
+        hasCheckbox: true
       };
 
       while (taskStack.length > 0 && taskStack[taskStack.length - 1].indent >= indent) {
@@ -141,7 +144,8 @@ export function parseMarkdown(content: string): Board {
         text,
         checked: false,
         line: lineNumber,
-        children: []
+        children: [],
+        hasCheckbox: false
       };
 
       // Add to most recent task
@@ -164,7 +168,8 @@ export function parseMarkdown(content: string): Board {
         text,
         checked: false,
         line: lineNumber,
-        children: []
+        children: [],
+        hasCheckbox: false
       };
 
       // Find appropriate parent based on indentation

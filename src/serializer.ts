@@ -111,6 +111,14 @@ export function moveTaskInContent(
     i++;
   }
 
+  // De-indent the task block to become top-level
+  const deindentedLines = taskLines.map(line => {
+    if (line.startsWith(' '.repeat(taskIndent))) {
+      return line.slice(taskIndent);
+    }
+    return line;
+  });
+
   // Remove the task block from original position
   const beforeTask = lines.slice(0, lineIndex);
   const afterTask = lines.slice(lineIndex + taskLines.length);
@@ -156,7 +164,7 @@ export function moveTaskInContent(
   // Insert task lines at the target position
   const result = [
     ...newLines.slice(0, targetInsertIndex),
-    ...taskLines,
+    ...deindentedLines,
     '',
     ...newLines.slice(targetInsertIndex)
   ];
