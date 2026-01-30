@@ -21,8 +21,9 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 
 ## TODO
-- Add tasks to section from editor
-- Edit text from tasks & save/sync
+- Double check creating sub items & editing inline
+- Dragging bottom items up broken
+  
 
 ## Markdown Format
 

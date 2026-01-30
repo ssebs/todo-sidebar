@@ -308,3 +308,144 @@ export function moveTaskToParent(
 
   return cleaned.join(lineEnding);
 }
+
+export function addTaskToSection(
+  content: string,
+  sectionTitle: string
+): { content: string; line: number } {
+  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+
+  // Find the section header
+  let sectionIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^##\s+(.+)$/);
+    if (match && match[1].trim() === sectionTitle) {
+      sectionIndex = i;
+      break;
+    }
+  }
+
+  if (sectionIndex === -1) {
+    return { content, line: -1 };
+  }
+
+  // Find insertion point (skip blank lines after header)
+  let insertIndex = sectionIndex + 1;
+  while (insertIndex < lines.length && lines[insertIndex].trim() === '') {
+    insertIndex++;
+  }
+
+  // Insert new task
+  const newTask = '- [ ] New task';
+  lines.splice(insertIndex, 0, newTask);
+
+  return {
+    content: lines.join(lineEnding),
+    line: insertIndex + 1 // 1-indexed
+  };
+}
+
+export function editTaskTextInContent(
+  content: string,
+  line: number,
+  newText: string
+): string {
+  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  const lineIndex = line - 1;
+
+  if (lineIndex < 0 || lineIndex >= lines.length) {
+    return content;
+  }
+
+  const currentLine = lines[lineIndex];
+
+  // Match markdown checkbox: - [ ] text or - [x] text
+  const mdMatch = currentLine.match(/^(\s*[-*]\s+\[[ xX]\]\s+)(.+)$/);
+  if (mdMatch) {
+    lines[lineIndex] = mdMatch[1] + newText;
+    return lines.join(lineEnding);
+  }
+
+  // Match unicode checkbox: - ☐ text or - ☑ text
+  const unicodeMatch = currentLine.match(/^(\s*[-*]\s+[☐☑✓✗]\s+)(.+)$/);
+  if (unicodeMatch) {
+    lines[lineIndex] = unicodeMatch[1] + newText;
+    return lines.join(lineEnding);
+  }
+
+  return content;
+}
+
+export function addSubtaskToParent(
+  content: string,
+  parentLine: number
+): { content: string; line: number } {
+  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  const parentIndex = parentLine - 1;
+
+  if (parentIndex < 0 || parentIndex >= lines.length) {
+    return { content, line: -1 };
+  }
+
+  const parentContent = lines[parentIndex];
+  const parentIndent = parentContent.match(/^(\s*)/)?.[1].length ?? 0;
+  const childIndent = ' '.repeat(parentIndent + 2);
+
+  // Find insertion point: after parent and all its existing children
+  let insertIndex = parentIndex + 1;
+  while (insertIndex < lines.length) {
+    const currentLine = lines[insertIndex];
+    const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+
+    if (currentLine.trim() === '') {
+      break;
+    }
+    if (currentIndent <= parentIndent) {
+      break;
+    }
+    insertIndex++;
+  }
+
+  // Insert new subtask
+  const newTask = `${childIndent}- [ ] New task`;
+  lines.splice(insertIndex, 0, newTask);
+
+  return {
+    content: lines.join(lineEnding),
+    line: insertIndex + 1 // 1-indexed
+  };
+}
+
+export function removeCheckboxFromTask(
+  content: string,
+  line: number
+): string {
+  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  const lineIndex = line - 1;
+
+  if (lineIndex < 0 || lineIndex >= lines.length) {
+    return content;
+  }
+
+  const currentLine = lines[lineIndex];
+
+  // Match markdown checkbox: - [ ] text or - [x] text and convert to - text
+  const mdMatch = currentLine.match(/^(\s*[-*]\s+)\[[ xX]\]\s+(.+)$/);
+  if (mdMatch) {
+    lines[lineIndex] = mdMatch[1] + mdMatch[2];
+    return lines.join(lineEnding);
+  }
+
+  // Match unicode checkbox: - ☐ text or - ☑ text and convert to - text
+  const unicodeMatch = currentLine.match(/^(\s*[-*]\s+)[☐☑✓✗]\s+(.+)$/);
+  if (unicodeMatch) {
+    lines[lineIndex] = unicodeMatch[1] + unicodeMatch[2];
+    return lines.join(lineEnding);
+  }
+
+  return content;
+}

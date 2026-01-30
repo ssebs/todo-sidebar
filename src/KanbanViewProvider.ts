@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { parseMarkdown, Board, Task, Column } from './parser';
-import { toggleTaskInContent, moveTaskInContent, moveTaskToParent } from './serializer';
+import { toggleTaskInContent, moveTaskInContent, moveTaskToParent, addTaskToSection, editTaskTextInContent, addSubtaskToParent, removeCheckboxFromTask } from './serializer';
 
 export class KanbanViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'todoSidebar.kanbanView';
@@ -50,6 +50,18 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           break;
         case 'moveToParent':
           await this._handleMoveToParent(message.taskLine, message.parentLine, message.position);
+          break;
+        case 'addTask':
+          await this._handleAddTask(message.section);
+          break;
+        case 'editTaskText':
+          await this._handleEditTaskText(message.line, message.newText);
+          break;
+        case 'addSubtask':
+          await this._handleAddSubtask(message.parentLine);
+          break;
+        case 'removeCheckbox':
+          await this._handleRemoveCheckbox(message.line);
           break;
       }
     });
@@ -218,6 +230,76 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private async _handleAddTask(section: string) {
+    if (!this._activeFileUri) {
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+      const text = Buffer.from(content).toString('utf-8');
+      const result = addTaskToSection(text, section);
+
+      if (result.line > 0) {
+        await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
+        // Tell webview to enter edit mode on the new task
+        this._view?.webview.postMessage({ type: 'editTask', line: result.line });
+      }
+    } catch (error) {
+      console.error('Error adding task:', error);
+    }
+  }
+
+  private async _handleEditTaskText(line: number, newText: string) {
+    if (!this._activeFileUri) {
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+      let text = Buffer.from(content).toString('utf-8');
+      text = editTaskTextInContent(text, line, newText);
+      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+    } catch (error) {
+      console.error('Error editing task text:', error);
+    }
+  }
+
+  private async _handleAddSubtask(parentLine: number) {
+    if (!this._activeFileUri) {
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+      const text = Buffer.from(content).toString('utf-8');
+      const result = addSubtaskToParent(text, parentLine);
+
+      if (result.line > 0) {
+        await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
+        // Tell webview to enter edit mode on the new subtask
+        this._view?.webview.postMessage({ type: 'editTask', line: result.line });
+      }
+    } catch (error) {
+      console.error('Error adding subtask:', error);
+    }
+  }
+
+  private async _handleRemoveCheckbox(line: number) {
+    if (!this._activeFileUri) {
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+      let text = Buffer.from(content).toString('utf-8');
+      text = removeCheckboxFromTask(text, line);
+      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+    } catch (error) {
+      console.error('Error removing checkbox:', error);
+    }
+  }
+
   private _getHtmlForWebview(webview: vscode.Webview): string {
     const nonce = getNonce();
 
@@ -267,10 +349,41 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       padding: 8px;
     }
     .column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       font-weight: bold;
       margin-bottom: 8px;
       padding-bottom: 4px;
       border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .add-task-btn {
+      background: none;
+      border: none;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      font-size: 1.2em;
+      opacity: 0.5;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .add-task-btn:hover {
+      opacity: 1;
+    }
+    .task-edit-input {
+      flex: 1;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-focusBorder);
+      color: var(--vscode-foreground);
+      font-family: inherit;
+      font-size: inherit;
+      padding: 2px 4px;
+      border-radius: 2px;
+      min-width: 0;
+    }
+    .task-edit-input:focus {
+      outline: none;
+      border-color: var(--vscode-focusBorder);
     }
     .column.drag-over {
       background: var(--vscode-list-hoverBackground);
@@ -306,7 +419,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       text-decoration: line-through;
       opacity: 0.7;
     }
-    .open-btn {
+    .open-btn, .add-subtask-btn, .remove-checkbox-btn {
       background: none;
       border: none;
       color: var(--vscode-textLink-foreground);
@@ -315,8 +428,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       font-size: 0.85em;
       opacity: 0.7;
     }
-    .open-btn:hover {
+    .open-btn:hover, .add-subtask-btn:hover, .remove-checkbox-btn:hover {
       opacity: 1;
+    }
+    .remove-checkbox-btn {
+      color: var(--vscode-errorForeground);
     }
     .children {
       margin-left: 20px;
@@ -457,7 +573,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         <div class="child-task" draggable="true" data-line="\${child.line}" data-in-done="\${isDoneColumn}">
           <div class="task-header">
             <input type="checkbox" class="task-checkbox" \${child.checked ? 'checked' : ''} data-line="\${child.line}" data-in-done="\${isDoneColumn}">
+            <button class="remove-checkbox-btn" data-line="\${child.line}" title="Remove checkbox">×</button>
             <span class="task-text \${child.checked ? 'checked' : ''}">\${escapeHtml(child.text)}</span>
+            <button class="add-subtask-btn" data-line="\${child.line}" title="Add subtask">+</button>
             <button class="open-btn" data-line="\${child.line}" title="Open in editor">↗</button>
           </div>
         </div>
@@ -472,6 +590,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           <div class="task-header">
             <input type="checkbox" class="task-checkbox" \${task.checked ? 'checked' : ''} data-line="\${task.line}" data-in-done="\${isDoneColumn}">
             <span class="task-text \${task.checked ? 'checked' : ''}">\${escapeHtml(task.text)}</span>
+            <button class="add-subtask-btn" data-line="\${task.line}" title="Add subtask">+</button>
             <button class="open-btn" data-line="\${task.line}" title="Open in editor">↗</button>
           </div>
           <div class="children" data-parent-line="\${task.line}">\${children}</div>
@@ -483,7 +602,10 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       const tasks = column.tasks.map(task => renderTask(task, column.isDoneColumn)).join('');
       return \`
         <div class="column" data-section="\${escapeHtml(column.title)}" data-is-done="\${column.isDoneColumn}">
-          <div class="column-header">\${escapeHtml(column.title)}</div>
+          <div class="column-header">
+            <span class="column-title">\${escapeHtml(column.title)}</span>
+            <button class="add-task-btn" data-section="\${escapeHtml(column.title)}" title="Add task">+</button>
+          </div>
           <div class="tasks" data-section="\${escapeHtml(column.title)}">\${tasks}</div>
         </div>
       \`;
@@ -549,6 +671,73 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       document.body.appendChild(overlay);
     }
 
+    function enterEditMode(taskElement) {
+      const textSpan = taskElement.querySelector('.task-text');
+      if (!textSpan || taskElement.querySelector('.task-edit-input')) {
+        return; // Already in edit mode
+      }
+
+      const line = parseInt(taskElement.dataset.line);
+      const originalText = textSpan.textContent;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'task-edit-input';
+      input.value = originalText;
+      input.dataset.line = line;
+      input.dataset.originalText = originalText;
+
+      textSpan.replaceWith(input);
+      input.focus();
+      input.select();
+
+      input.addEventListener('keydown', handleEditKeydown);
+      input.addEventListener('blur', handleEditBlur);
+    }
+
+    function handleEditKeydown(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveEdit(e.target);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelEdit(e.target);
+      }
+    }
+
+    function handleEditBlur(e) {
+      // Small delay to allow cancel via Escape
+      setTimeout(() => {
+        if (document.body.contains(e.target)) {
+          saveEdit(e.target);
+        }
+      }, 0);
+    }
+
+    function saveEdit(input) {
+      const line = parseInt(input.dataset.line);
+      const newText = input.value.trim();
+      const originalText = input.dataset.originalText;
+
+      if (newText && newText !== originalText) {
+        vscode.postMessage({ type: 'editTaskText', line, newText });
+      }
+      // Restore span (UI will fully refresh from file watcher)
+      restoreTextSpan(input, newText || originalText);
+    }
+
+    function cancelEdit(input) {
+      const originalText = input.dataset.originalText;
+      restoreTextSpan(input, originalText);
+    }
+
+    function restoreTextSpan(input, text) {
+      const span = document.createElement('span');
+      span.className = 'task-text';
+      span.textContent = text;
+      input.replaceWith(span);
+    }
+
     function setupEventListeners() {
       // Checkboxes
       document.querySelectorAll('.task-checkbox').forEach(checkbox => {
@@ -573,6 +762,35 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         btn.addEventListener('click', (e) => {
           const line = parseInt(e.target.dataset.line);
           vscode.postMessage({ type: 'openAtLine', line });
+        });
+      });
+
+      // Add task buttons
+      document.querySelectorAll('.add-task-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const section = e.target.dataset.section;
+          vscode.postMessage({ type: 'addTask', section });
+        });
+      });
+
+      // Add subtask buttons
+      document.querySelectorAll('.add-subtask-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const parentLine = parseInt(e.target.dataset.line);
+          vscode.postMessage({ type: 'addSubtask', parentLine });
+        });
+      });
+
+      // Double-click to edit
+      document.querySelectorAll('.task-text').forEach(textSpan => {
+        textSpan.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          const taskElement = e.target.closest('.task, .child-task');
+          if (taskElement) {
+            enterEditMode(taskElement);
+          }
         });
       });
 
@@ -647,6 +865,14 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         updateUI();
       } else if (message.type === 'columnsForPicker') {
         showColumnPicker(message.columns, message.taskLine);
+      } else if (message.type === 'editTask') {
+        // Enter edit mode on newly added task after refresh
+        setTimeout(() => {
+          const taskElement = document.querySelector(\`[data-line="\${message.line}"]\`);
+          if (taskElement) {
+            enterEditMode(taskElement);
+          }
+        }, 100);
       }
     });
   </script>

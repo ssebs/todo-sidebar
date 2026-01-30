@@ -4,10 +4,14 @@
 
 ## In Progress 🚀
 
+- [ ] do the mvp
+
 - [ ] create the extension
   - [ ] start the readme
 
-- [ ] do the mvp
+- [ ] New thing 1
+  - [ ] item
+  - [ ] yes
 
 ## Backlog 📋
 
@@ -15,6 +19,8 @@
   - > really good
 
 ## Done ✅
+
+- [x] Sub thing
 
 - [x] A second thing
 
