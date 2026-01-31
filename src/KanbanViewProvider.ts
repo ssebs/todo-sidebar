@@ -431,13 +431,19 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       text-decoration: line-through;
       opacity: 0.7;
     }
+    .task-actions {
+      display: flex;
+      flex-shrink: 0;
+      gap: 2px;
+    }
     .open-btn, .add-subtask-btn {
       background: none;
       border: none;
       color: var(--vscode-textLink-foreground);
       cursor: pointer;
       padding: 2px 4px;
-      font-size: 0.85em;
+      font-size: 14px;
+      line-height: 1;
       opacity: 0.7;
     }
     .open-btn:hover, .add-subtask-btn:hover {
@@ -579,8 +585,10 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           <div class="task-header">
             <input type="checkbox" class="task-checkbox" \${child.checked ? 'checked' : ''} data-line="\${child.line}" data-in-done="\${isDoneColumn}">
             <span class="task-text \${child.checked ? 'checked' : ''}">\${escapeHtml(child.text)}</span>
-            <button class="add-subtask-btn" data-line="\${child.line}" title="Add subtask">+</button>
-            <button class="open-btn" data-line="\${child.line}" title="Open in editor">↗</button>
+            <div class="task-actions">
+              <button class="add-subtask-btn" data-line="\${child.line}" title="Add subtask">+</button>
+              <button class="open-btn" data-line="\${child.line}" title="Open in editor">↗</button>
+            </div>
           </div>
           \${grandchildren ? '<div class="children" data-parent-line="' + child.line + '">' + grandchildren + '</div>' : ''}
         </div>
@@ -595,8 +603,10 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           <div class="task-header">
             <input type="checkbox" class="task-checkbox" \${task.checked ? 'checked' : ''} data-line="\${task.line}" data-in-done="\${isDoneColumn}">
             <span class="task-text \${task.checked ? 'checked' : ''}">\${escapeHtml(task.text)}</span>
-            <button class="add-subtask-btn" data-line="\${task.line}" title="Add subtask">+</button>
-            <button class="open-btn" data-line="\${task.line}" title="Open in editor">↗</button>
+            <div class="task-actions">
+              <button class="add-subtask-btn" data-line="\${task.line}" title="Add subtask">+</button>
+              <button class="open-btn" data-line="\${task.line}" title="Open in editor">↗</button>
+            </div>
           </div>
           <div class="children" data-parent-line="\${task.line}">\${children}</div>
         </div>
@@ -786,14 +796,15 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         });
       });
 
-      // Double-click to edit
-      document.querySelectorAll('.task-text').forEach(textSpan => {
-        textSpan.addEventListener('dblclick', (e) => {
-          e.stopPropagation();
-          const taskElement = e.target.closest('.task, .child-task');
-          if (taskElement) {
-            enterEditMode(taskElement);
+      // Double-click to edit - listen on task container, not just text
+      document.querySelectorAll('.task, .child-task').forEach(taskElement => {
+        taskElement.addEventListener('dblclick', (e) => {
+          // Don't trigger if clicking on buttons or checkbox
+          if (e.target.closest('button, input')) {
+            return;
           }
+          e.stopPropagation();
+          enterEditMode(taskElement);
         });
       });
 

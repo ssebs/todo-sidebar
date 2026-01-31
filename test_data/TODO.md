@@ -1,19 +1,17 @@
 # TODO
 
-> Description updated
+> This is a list of tasks
 
 ## In Progress 🚀
 
-- [ ] ok
-  - [x] New task
-  - [ ] New task
-  - [x] New task2
-  - [x] New task3
+- [ ] Groceries
+  - [ ] apples
+  - [ ] milk
 
 - [ ] Create the extension
-  - [ ] New taskk
-    - [x] New task
-    - [ ] New task
+  - [x] vibe code it
+  - [x] make it work
+  - [ ] cleanup the code
 
 - [ ] New thing 1
   - [ ] yes
