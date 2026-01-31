@@ -26,8 +26,9 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 ## TODO
 
-- delete button on rows
 - cleanup the code
+  - See `PLAN.md`
+- delete button on rows
 
 ## Markdown Format
 
@@ -55,7 +56,6 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - [x] Finished item
 - [x] Another thing
   - [x] Sub other thing
-
 ```
 
 ## LICENSE
