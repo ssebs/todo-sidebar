@@ -2,6 +2,8 @@
 
 A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed directly from Markdown files.
 
+> Sorry, this is a vibe-coded app. I just wanted the feature 🤷‍♀️
+
 ## Features
 
 - **Markdown-powered** - Your todos live in plain `.md` files, not a proprietary format
@@ -13,20 +15,21 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - **Live sync** - Changes in the editor instantly update the board and vice versa
 
 ## Usage
+
 - Open the **Todo Board panel** in the sidebar
 - Run command: **Todo Sidebar: Open Markdown File**
 - Select your markdown file
 - Drag tasks between columns, check/uncheck to toggle status
 - You can move this panel to the right by dragging it over
 
-
 ## TODO
+
 - delete button on rows
 - cleanup the code
 
 ## Markdown Format
 
-```md
+````md
 # Board Title
 
 > Optional description
@@ -42,9 +45,8 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 - [x] Finished item
 
-
-
 ## TODO
+
 - Add new task from extension
 - Edit text on text click
 
@@ -70,3 +72,8 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - [x] Create this example MD
 - [x] A second thing
 ```
+````
+
+## LICENSE
+
+[Apache v2](./LICENSE)
