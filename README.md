@@ -43,6 +43,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - MD file doesn't persist when closing the panel
 - Save md file to use in workspace settings json
 - delete button on rows
+- GH action to build / run tests / publish
 
 ## Markdown Format
 
