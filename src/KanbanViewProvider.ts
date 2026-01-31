@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { parseMarkdown, Board, Task, Column } from './parser';
-import { toggleTaskInContent, moveTaskInContent, moveTaskToParent, addTaskToSection, editTaskTextInContent, addSubtaskToParent, removeCheckboxFromTask } from './serializer';
+import { toggleTaskInContent, moveTaskInContent, moveTaskToParent, addTaskToSection, editTaskTextInContent, addSubtaskToParent } from './serializer';
 
 export class KanbanViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'todoSidebar.kanbanView';
@@ -9,6 +9,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   private _activeFileUri?: vscode.Uri;
   private _board?: Board;
   private _disposables: vscode.Disposable[] = [];
+  private _pendingEditLine?: number;
 
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
@@ -33,7 +34,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           await this._handleToggle(message.line, message.checked, message.targetColumn);
           break;
         case 'move':
-          await this._handleMove(message.taskLine, message.targetSection, message.position);
+          await this._handleMove(message.taskLine, message.targetSection, message.position, message.afterLine);
           break;
         case 'openAtLine':
           await this._handleOpenAtLine(message.line);
@@ -49,7 +50,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           }
           break;
         case 'moveToParent':
-          await this._handleMoveToParent(message.taskLine, message.parentLine, message.position);
+          await this._handleMoveToParent(message.taskLine, message.parentLine, message.position, message.afterLine);
           break;
         case 'addTask':
           await this._handleAddTask(message.section);
@@ -60,20 +61,28 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         case 'addSubtask':
           await this._handleAddSubtask(message.parentLine);
           break;
-        case 'removeCheckbox':
-          await this._handleRemoveCheckbox(message.line);
-          break;
       }
     });
 
-    // Set up file watchers
-    this._setupFileWatchers();
+    // Set up file watchers only once
+    if (this._disposables.length === 0) {
+      this._setupFileWatchers();
+    }
 
-    // Restore previously selected file
-    const savedUri = this._context.workspaceState.get<string>('todoSidebar.activeFile');
-    console.log('Restoring saved URI:', savedUri);
-    if (savedUri) {
-      this._activeFileUri = vscode.Uri.parse(savedUri);
+    // Restore file: use existing activeFileUri or load from saved state
+    if (!this._activeFileUri) {
+      const savedPath = this._context.workspaceState.get<string>('todoSidebar.activeFile');
+      if (savedPath) {
+        try {
+          this._activeFileUri = vscode.Uri.file(savedPath);
+        } catch (e) {
+          console.error('Failed to restore saved file:', e);
+        }
+      }
+    }
+
+    // Always refresh when view becomes visible
+    if (this._activeFileUri) {
       this._refresh();
     }
   }
@@ -102,8 +111,8 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
   public async setActiveFile(uri: vscode.Uri) {
     this._activeFileUri = uri;
-    console.log('Saving active file:', uri.toString());
-    await this._context.workspaceState.update('todoSidebar.activeFile', uri.toString());
+    // Store the fsPath for reliable restoration across sessions
+    await this._context.workspaceState.update('todoSidebar.activeFile', uri.fsPath);
     await this._refresh();
   }
 
@@ -120,7 +129,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       const content = await vscode.workspace.fs.readFile(this._activeFileUri);
       const text = Buffer.from(content).toString('utf-8');
       this._board = parseMarkdown(text);
-      this._view.webview.postMessage({ type: 'update', board: this._board });
+      const editLine = this._pendingEditLine;
+      this._pendingEditLine = undefined;
+      this._view.webview.postMessage({ type: 'update', board: this._board, editLine });
     } catch (error) {
       console.error('Error refreshing kanban board:', error);
     }
@@ -138,8 +149,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       // Toggle the checkbox
       text = toggleTaskInContent(text, line, checked);
 
-      if (checked) {
-        // If checked, move to Done column at TOP
+      // Only move top-level tasks to Done column (not subtasks)
+      const isTopLevel = this._isTopLevelTask(line);
+
+      if (checked && isTopLevel) {
+        // If checked and top-level, move to Done column at TOP
         const doneColumn = this._board.columns.find((c) => c.isDoneColumn);
         if (doneColumn) {
           const currentColumn = this._findTaskColumn(line);
@@ -147,7 +161,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
             text = moveTaskInContent(text, line, doneColumn.title, 'top');
           }
         }
-      } else if (targetColumn) {
+      } else if (targetColumn && isTopLevel) {
         // If unchecked and a target column is specified, move there at TOP
         text = moveTaskInContent(text, line, targetColumn, 'top');
       }
@@ -156,6 +170,21 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     } catch (error) {
       console.error('Error toggling task:', error);
     }
+  }
+
+  private _isTopLevelTask(line: number): boolean {
+    if (!this._board) {
+      return false;
+    }
+
+    for (const column of this._board.columns) {
+      for (const task of column.tasks) {
+        if (task.line === line) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private _findTaskColumn(line: number): Column | undefined {
@@ -184,7 +213,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     return undefined;
   }
 
-  private async _handleMove(taskLine: number, targetSection: string, position: 'top' | 'bottom' = 'bottom') {
+  private async _handleMove(taskLine: number, targetSection: string, position: 'top' | 'bottom' | 'after' = 'bottom', afterLine?: number) {
     if (!this._activeFileUri) {
       return;
     }
@@ -192,14 +221,14 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     try {
       const content = await vscode.workspace.fs.readFile(this._activeFileUri);
       let text = Buffer.from(content).toString('utf-8');
-      text = moveTaskInContent(text, taskLine, targetSection, position);
+      text = moveTaskInContent(text, taskLine, targetSection, position, afterLine);
       await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
     } catch (error) {
       console.error('Error moving task:', error);
     }
   }
 
-  private async _handleMoveToParent(taskLine: number, parentLine: number, position: 'top' | 'bottom' = 'bottom') {
+  private async _handleMoveToParent(taskLine: number, parentLine: number, position: 'top' | 'bottom' | 'after' = 'bottom', afterLine?: number) {
     if (!this._activeFileUri) {
       return;
     }
@@ -207,7 +236,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     try {
       const content = await vscode.workspace.fs.readFile(this._activeFileUri);
       let text = Buffer.from(content).toString('utf-8');
-      text = moveTaskToParent(text, taskLine, parentLine, position);
+      text = moveTaskToParent(text, taskLine, parentLine, position, afterLine);
       await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
     } catch (error) {
       console.error('Error moving task to parent:', error);
@@ -241,9 +270,8 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       const result = addTaskToSection(text, section);
 
       if (result.line > 0) {
+        this._pendingEditLine = result.line;
         await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
-        // Tell webview to enter edit mode on the new task
-        this._view?.webview.postMessage({ type: 'editTask', line: result.line });
       }
     } catch (error) {
       console.error('Error adding task:', error);
@@ -276,27 +304,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       const result = addSubtaskToParent(text, parentLine);
 
       if (result.line > 0) {
+        this._pendingEditLine = result.line;
         await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
-        // Tell webview to enter edit mode on the new subtask
-        this._view?.webview.postMessage({ type: 'editTask', line: result.line });
       }
     } catch (error) {
       console.error('Error adding subtask:', error);
-    }
-  }
-
-  private async _handleRemoveCheckbox(line: number) {
-    if (!this._activeFileUri) {
-      return;
-    }
-
-    try {
-      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-      let text = Buffer.from(content).toString('utf-8');
-      text = removeCheckboxFromTask(text, line);
-      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
-    } catch (error) {
-      console.error('Error removing checkbox:', error);
     }
   }
 
@@ -419,7 +431,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       text-decoration: line-through;
       opacity: 0.7;
     }
-    .open-btn, .add-subtask-btn, .remove-checkbox-btn {
+    .open-btn, .add-subtask-btn {
       background: none;
       border: none;
       color: var(--vscode-textLink-foreground);
@@ -428,23 +440,15 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       font-size: 0.85em;
       opacity: 0.7;
     }
-    .open-btn:hover, .add-subtask-btn:hover, .remove-checkbox-btn:hover {
+    .open-btn:hover, .add-subtask-btn:hover {
       opacity: 1;
-    }
-    .remove-checkbox-btn {
-      color: var(--vscode-errorForeground);
     }
     .children {
       margin-left: 20px;
       margin-top: 4px;
+      min-height: 10px;
       font-size: 0.9em;
       color: var(--vscode-descriptionForeground);
-    }
-    .child-item {
-      margin: 2px 0;
-    }
-    .children {
-      min-height: 10px;
     }
     .child-task {
       background: var(--vscode-input-background);
@@ -569,15 +573,16 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     let board = null;
 
     function renderChildTask(child, isDoneColumn) {
+      const grandchildren = child.children.map(c => renderChildTask(c, isDoneColumn)).join('');
       return \`
         <div class="child-task" draggable="true" data-line="\${child.line}" data-in-done="\${isDoneColumn}">
           <div class="task-header">
             <input type="checkbox" class="task-checkbox" \${child.checked ? 'checked' : ''} data-line="\${child.line}" data-in-done="\${isDoneColumn}">
-            <button class="remove-checkbox-btn" data-line="\${child.line}" title="Remove checkbox">×</button>
             <span class="task-text \${child.checked ? 'checked' : ''}">\${escapeHtml(child.text)}</span>
             <button class="add-subtask-btn" data-line="\${child.line}" title="Add subtask">+</button>
             <button class="open-btn" data-line="\${child.line}" title="Open in editor">↗</button>
           </div>
+          \${grandchildren ? '<div class="children" data-parent-line="' + child.line + '">' + grandchildren + '</div>' : ''}
         </div>
       \`;
     }
@@ -636,8 +641,6 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       document.getElementById('content').innerHTML = renderBoard(board);
       setupEventListeners();
     }
-
-    let pendingUncheckLine = null;
 
     function showColumnPicker(columns, taskLine) {
       // Filter out the Done column - user shouldn't move back to Done
@@ -810,16 +813,24 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
             if (targetParentLine) {
               // Dropped into a parent task's children area
+              const prevSibling = evt.item.previousElementSibling;
+              const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
               vscode.postMessage({
                 type: 'moveToParent',
                 taskLine,
                 parentLine: parseInt(targetParentLine),
-                position: newIndex === 0 ? 'top' : 'bottom'
+                position: newIndex === 0 ? 'top' : 'after',
+                afterLine
               });
             } else if (targetSection) {
-              // Dropped into a column
-              const position = newIndex === 0 ? 'top' : 'bottom';
-              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+              // Dropped into a column - find what we're after
+              const prevSibling = evt.item.previousElementSibling;
+              if (newIndex === 0 || !prevSibling) {
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+              } else {
+                const afterLine = parseInt(prevSibling.dataset.line);
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
+              }
             }
           }
         });
@@ -841,16 +852,24 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
             if (targetParentLine) {
               // Dropped into a parent task's children area
+              const prevSibling = evt.item.previousElementSibling;
+              const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
               vscode.postMessage({
                 type: 'moveToParent',
                 taskLine,
                 parentLine: parseInt(targetParentLine),
-                position: newIndex === 0 ? 'top' : 'bottom'
+                position: newIndex === 0 ? 'top' : 'after',
+                afterLine
               });
             } else if (targetSection) {
               // Promoted to column level (dragged out of parent)
-              const position = newIndex === 0 ? 'top' : 'bottom';
-              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+              const prevSibling = evt.item.previousElementSibling;
+              if (newIndex === 0 || !prevSibling) {
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+              } else {
+                const afterLine = parseInt(prevSibling.dataset.line);
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
+              }
             }
           }
         });
@@ -863,16 +882,15 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       if (message.type === 'update') {
         board = message.board;
         updateUI();
-      } else if (message.type === 'columnsForPicker') {
-        showColumnPicker(message.columns, message.taskLine);
-      } else if (message.type === 'editTask') {
-        // Enter edit mode on newly added task after refresh
-        setTimeout(() => {
-          const taskElement = document.querySelector(\`[data-line="\${message.line}"]\`);
+        // Enter edit mode on newly added task if specified
+        if (message.editLine) {
+          const taskElement = document.querySelector(\`[data-line="\${message.editLine}"]\`);
           if (taskElement) {
             enterEditMode(taskElement);
           }
-        }, 100);
+        }
+      } else if (message.type === 'columnsForPicker') {
+        showColumnPicker(message.columns, message.taskLine);
       }
     });
   </script>

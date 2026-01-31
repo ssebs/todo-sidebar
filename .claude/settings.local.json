@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm run compile:*)",
-      "Bash(npm run compile-tests:*)"
+      "Bash(npm run compile-tests:*)",
+      "Bash(npm run lint)"
     ]
   }
 }

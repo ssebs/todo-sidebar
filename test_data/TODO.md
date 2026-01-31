@@ -4,24 +4,35 @@
 
 ## In Progress 🚀
 
+- [ ] ok
+  - [x] New task
+  - [ ] New task
+  - [x] New task2
+  - [x] New task3
+
 - [ ] Create the extension
-  - [ ] start the readme
   - [ ] New taskk
+    - [x] New task
+    - [ ] New task
 
 - [ ] New thing 1
-  - [ ] item
   - [ ] yes
+
+- [ ] new thing3
+  - [ ] test
+- [ ] item
 
 - [ ] do the mvp
 
 ## Backlog 📋
 
-- [ ] New task
-
 - [ ] Make it good
+  - [ ] New task
   - > really good
 
 ## Done ✅
+
+- [x] start the readme
 
 - [x] Sub thing
 

@@ -134,6 +134,7 @@ class KanbanViewProvider {
     _activeFileUri;
     _board;
     _disposables = [];
+    _pendingEditLine;
     constructor(_context) {
         this._context = _context;
     }
@@ -151,7 +152,7 @@ class KanbanViewProvider {
                     await this._handleToggle(message.line, message.checked, message.targetColumn);
                     break;
                 case 'move':
-                    await this._handleMove(message.taskLine, message.targetSection, message.position);
+                    await this._handleMove(message.taskLine, message.targetSection, message.position, message.afterLine);
                     break;
                 case 'openAtLine':
                     await this._handleOpenAtLine(message.line);
@@ -167,7 +168,7 @@ class KanbanViewProvider {
                     }
                     break;
                 case 'moveToParent':
-                    await this._handleMoveToParent(message.taskLine, message.parentLine, message.position);
+                    await this._handleMoveToParent(message.taskLine, message.parentLine, message.position, message.afterLine);
                     break;
                 case 'addTask':
                     await this._handleAddTask(message.section);
@@ -178,18 +179,26 @@ class KanbanViewProvider {
                 case 'addSubtask':
                     await this._handleAddSubtask(message.parentLine);
                     break;
-                case 'removeCheckbox':
-                    await this._handleRemoveCheckbox(message.line);
-                    break;
             }
         });
-        // Set up file watchers
-        this._setupFileWatchers();
-        // Restore previously selected file
-        const savedUri = this._context.workspaceState.get('todoSidebar.activeFile');
-        console.log('Restoring saved URI:', savedUri);
-        if (savedUri) {
-            this._activeFileUri = vscode.Uri.parse(savedUri);
+        // Set up file watchers only once
+        if (this._disposables.length === 0) {
+            this._setupFileWatchers();
+        }
+        // Restore file: use existing activeFileUri or load from saved state
+        if (!this._activeFileUri) {
+            const savedPath = this._context.workspaceState.get('todoSidebar.activeFile');
+            if (savedPath) {
+                try {
+                    this._activeFileUri = vscode.Uri.file(savedPath);
+                }
+                catch (e) {
+                    console.error('Failed to restore saved file:', e);
+                }
+            }
+        }
+        // Always refresh when view becomes visible
+        if (this._activeFileUri) {
             this._refresh();
         }
     }
@@ -211,8 +220,8 @@ class KanbanViewProvider {
     }
     async setActiveFile(uri) {
         this._activeFileUri = uri;
-        console.log('Saving active file:', uri.toString());
-        await this._context.workspaceState.update('todoSidebar.activeFile', uri.toString());
+        // Store the fsPath for reliable restoration across sessions
+        await this._context.workspaceState.update('todoSidebar.activeFile', uri.fsPath);
         await this._refresh();
     }
     async refresh() {
@@ -226,7 +235,9 @@ class KanbanViewProvider {
             const content = await vscode.workspace.fs.readFile(this._activeFileUri);
             const text = Buffer.from(content).toString('utf-8');
             this._board = (0, parser_1.parseMarkdown)(text);
-            this._view.webview.postMessage({ type: 'update', board: this._board });
+            const editLine = this._pendingEditLine;
+            this._pendingEditLine = undefined;
+            this._view.webview.postMessage({ type: 'update', board: this._board, editLine });
         }
         catch (error) {
             console.error('Error refreshing kanban board:', error);
@@ -241,8 +252,10 @@ class KanbanViewProvider {
             let text = Buffer.from(content).toString('utf-8');
             // Toggle the checkbox
             text = (0, serializer_1.toggleTaskInContent)(text, line, checked);
-            if (checked) {
-                // If checked, move to Done column at TOP
+            // Only move top-level tasks to Done column (not subtasks)
+            const isTopLevel = this._isTopLevelTask(line);
+            if (checked && isTopLevel) {
+                // If checked and top-level, move to Done column at TOP
                 const doneColumn = this._board.columns.find((c) => c.isDoneColumn);
                 if (doneColumn) {
                     const currentColumn = this._findTaskColumn(line);
@@ -251,7 +264,7 @@ class KanbanViewProvider {
                     }
                 }
             }
-            else if (targetColumn) {
+            else if (targetColumn && isTopLevel) {
                 // If unchecked and a target column is specified, move there at TOP
                 text = (0, serializer_1.moveTaskInContent)(text, line, targetColumn, 'top');
             }
@@ -260,6 +273,19 @@ class KanbanViewProvider {
         catch (error) {
             console.error('Error toggling task:', error);
         }
+    }
+    _isTopLevelTask(line) {
+        if (!this._board) {
+            return false;
+        }
+        for (const column of this._board.columns) {
+            for (const task of column.tasks) {
+                if (task.line === line) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     _findTaskColumn(line) {
         if (!this._board) {
@@ -283,28 +309,28 @@ class KanbanViewProvider {
         }
         return undefined;
     }
-    async _handleMove(taskLine, targetSection, position = 'bottom') {
+    async _handleMove(taskLine, targetSection, position = 'bottom', afterLine) {
         if (!this._activeFileUri) {
             return;
         }
         try {
             const content = await vscode.workspace.fs.readFile(this._activeFileUri);
             let text = Buffer.from(content).toString('utf-8');
-            text = (0, serializer_1.moveTaskInContent)(text, taskLine, targetSection, position);
+            text = (0, serializer_1.moveTaskInContent)(text, taskLine, targetSection, position, afterLine);
             await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
         }
         catch (error) {
             console.error('Error moving task:', error);
         }
     }
-    async _handleMoveToParent(taskLine, parentLine, position = 'bottom') {
+    async _handleMoveToParent(taskLine, parentLine, position = 'bottom', afterLine) {
         if (!this._activeFileUri) {
             return;
         }
         try {
             const content = await vscode.workspace.fs.readFile(this._activeFileUri);
             let text = Buffer.from(content).toString('utf-8');
-            text = (0, serializer_1.moveTaskToParent)(text, taskLine, parentLine, position);
+            text = (0, serializer_1.moveTaskToParent)(text, taskLine, parentLine, position, afterLine);
             await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
         }
         catch (error) {
@@ -335,9 +361,8 @@ class KanbanViewProvider {
             const text = Buffer.from(content).toString('utf-8');
             const result = (0, serializer_1.addTaskToSection)(text, section);
             if (result.line > 0) {
+                this._pendingEditLine = result.line;
                 await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
-                // Tell webview to enter edit mode on the new task
-                this._view?.webview.postMessage({ type: 'editTask', line: result.line });
             }
         }
         catch (error) {
@@ -367,27 +392,12 @@ class KanbanViewProvider {
             const text = Buffer.from(content).toString('utf-8');
             const result = (0, serializer_1.addSubtaskToParent)(text, parentLine);
             if (result.line > 0) {
+                this._pendingEditLine = result.line;
                 await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
-                // Tell webview to enter edit mode on the new subtask
-                this._view?.webview.postMessage({ type: 'editTask', line: result.line });
             }
         }
         catch (error) {
             console.error('Error adding subtask:', error);
-        }
-    }
-    async _handleRemoveCheckbox(line) {
-        if (!this._activeFileUri) {
-            return;
-        }
-        try {
-            const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-            let text = Buffer.from(content).toString('utf-8');
-            text = (0, serializer_1.removeCheckboxFromTask)(text, line);
-            await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
-        }
-        catch (error) {
-            console.error('Error removing checkbox:', error);
         }
     }
     _getHtmlForWebview(webview) {
@@ -508,7 +518,7 @@ class KanbanViewProvider {
       text-decoration: line-through;
       opacity: 0.7;
     }
-    .open-btn, .add-subtask-btn, .remove-checkbox-btn {
+    .open-btn, .add-subtask-btn {
       background: none;
       border: none;
       color: var(--vscode-textLink-foreground);
@@ -517,23 +527,15 @@ class KanbanViewProvider {
       font-size: 0.85em;
       opacity: 0.7;
     }
-    .open-btn:hover, .add-subtask-btn:hover, .remove-checkbox-btn:hover {
+    .open-btn:hover, .add-subtask-btn:hover {
       opacity: 1;
-    }
-    .remove-checkbox-btn {
-      color: var(--vscode-errorForeground);
     }
     .children {
       margin-left: 20px;
       margin-top: 4px;
+      min-height: 10px;
       font-size: 0.9em;
       color: var(--vscode-descriptionForeground);
-    }
-    .child-item {
-      margin: 2px 0;
-    }
-    .children {
-      min-height: 10px;
     }
     .child-task {
       background: var(--vscode-input-background);
@@ -658,15 +660,16 @@ class KanbanViewProvider {
     let board = null;
 
     function renderChildTask(child, isDoneColumn) {
+      const grandchildren = child.children.map(c => renderChildTask(c, isDoneColumn)).join('');
       return \`
         <div class="child-task" draggable="true" data-line="\${child.line}" data-in-done="\${isDoneColumn}">
           <div class="task-header">
             <input type="checkbox" class="task-checkbox" \${child.checked ? 'checked' : ''} data-line="\${child.line}" data-in-done="\${isDoneColumn}">
-            <button class="remove-checkbox-btn" data-line="\${child.line}" title="Remove checkbox">×</button>
             <span class="task-text \${child.checked ? 'checked' : ''}">\${escapeHtml(child.text)}</span>
             <button class="add-subtask-btn" data-line="\${child.line}" title="Add subtask">+</button>
             <button class="open-btn" data-line="\${child.line}" title="Open in editor">↗</button>
           </div>
+          \${grandchildren ? '<div class="children" data-parent-line="' + child.line + '">' + grandchildren + '</div>' : ''}
         </div>
       \`;
     }
@@ -725,8 +728,6 @@ class KanbanViewProvider {
       document.getElementById('content').innerHTML = renderBoard(board);
       setupEventListeners();
     }
-
-    let pendingUncheckLine = null;
 
     function showColumnPicker(columns, taskLine) {
       // Filter out the Done column - user shouldn't move back to Done
@@ -899,16 +900,24 @@ class KanbanViewProvider {
 
             if (targetParentLine) {
               // Dropped into a parent task's children area
+              const prevSibling = evt.item.previousElementSibling;
+              const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
               vscode.postMessage({
                 type: 'moveToParent',
                 taskLine,
                 parentLine: parseInt(targetParentLine),
-                position: newIndex === 0 ? 'top' : 'bottom'
+                position: newIndex === 0 ? 'top' : 'after',
+                afterLine
               });
             } else if (targetSection) {
-              // Dropped into a column
-              const position = newIndex === 0 ? 'top' : 'bottom';
-              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+              // Dropped into a column - find what we're after
+              const prevSibling = evt.item.previousElementSibling;
+              if (newIndex === 0 || !prevSibling) {
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+              } else {
+                const afterLine = parseInt(prevSibling.dataset.line);
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
+              }
             }
           }
         });
@@ -930,16 +939,24 @@ class KanbanViewProvider {
 
             if (targetParentLine) {
               // Dropped into a parent task's children area
+              const prevSibling = evt.item.previousElementSibling;
+              const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
               vscode.postMessage({
                 type: 'moveToParent',
                 taskLine,
                 parentLine: parseInt(targetParentLine),
-                position: newIndex === 0 ? 'top' : 'bottom'
+                position: newIndex === 0 ? 'top' : 'after',
+                afterLine
               });
             } else if (targetSection) {
               // Promoted to column level (dragged out of parent)
-              const position = newIndex === 0 ? 'top' : 'bottom';
-              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+              const prevSibling = evt.item.previousElementSibling;
+              if (newIndex === 0 || !prevSibling) {
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+              } else {
+                const afterLine = parseInt(prevSibling.dataset.line);
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
+              }
             }
           }
         });
@@ -952,16 +969,15 @@ class KanbanViewProvider {
       if (message.type === 'update') {
         board = message.board;
         updateUI();
-      } else if (message.type === 'columnsForPicker') {
-        showColumnPicker(message.columns, message.taskLine);
-      } else if (message.type === 'editTask') {
-        // Enter edit mode on newly added task after refresh
-        setTimeout(() => {
-          const taskElement = document.querySelector(\`[data-line="\${message.line}"]\`);
+        // Enter edit mode on newly added task if specified
+        if (message.editLine) {
+          const taskElement = document.querySelector(\`[data-line="\${message.editLine}"]\`);
           if (taskElement) {
             enterEditMode(taskElement);
           }
-        }, 100);
+        }
+      } else if (message.type === 'columnsForPicker') {
+        showColumnPicker(message.columns, message.taskLine);
       }
     });
   </script>
@@ -1145,7 +1161,6 @@ function parseMarkdown(content) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.serializeBoard = serializeBoard;
 exports.toggleTaskInContent = toggleTaskInContent;
 exports.moveTaskInContent = moveTaskInContent;
 exports.moveTaskToParent = moveTaskToParent;
@@ -1153,44 +1168,6 @@ exports.addTaskToSection = addTaskToSection;
 exports.editTaskTextInContent = editTaskTextInContent;
 exports.addSubtaskToParent = addSubtaskToParent;
 exports.removeCheckboxFromTask = removeCheckboxFromTask;
-function serializeTask(task, indent = 0) {
-    const lines = [];
-    const prefix = ' '.repeat(indent);
-    const checkbox = task.checked ? '[x]' : '[ ]';
-    lines.push(`${prefix}- ${checkbox} ${task.text}`);
-    for (const child of task.children) {
-        lines.push(...serializeTask(child, indent + 2));
-    }
-    return lines;
-}
-function serializeColumn(column) {
-    const lines = [];
-    lines.push(`## ${column.title}`);
-    lines.push('');
-    for (const task of column.tasks) {
-        lines.push(...serializeTask(task));
-    }
-    lines.push('');
-    return lines;
-}
-function serializeBoard(board) {
-    const lines = [];
-    if (board.title) {
-        lines.push(`# ${board.title}`);
-        lines.push('');
-    }
-    if (board.description) {
-        const descLines = board.description.split('\n');
-        for (const descLine of descLines) {
-            lines.push(`> ${descLine}`);
-        }
-        lines.push('');
-    }
-    for (const column of board.columns) {
-        lines.push(...serializeColumn(column));
-    }
-    return lines.join('\n');
-}
 function toggleTaskInContent(content, line, checked) {
     // Detect line ending style
     const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
@@ -1215,7 +1192,7 @@ function toggleTaskInContent(content, line, checked) {
     }
     return lines.join(lineEnding);
 }
-function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bottom') {
+function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bottom', afterLine) {
     // Detect line ending style
     const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
     const lines = content.split(/\r?\n/);
@@ -1251,12 +1228,18 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
     const beforeTask = lines.slice(0, lineIndex);
     const afterTask = lines.slice(lineIndex + taskLines.length);
     const newLines = [...beforeTask, ...afterTask];
-    // Find the target section and insert at top or bottom
+    // Find the target section and insert position
     let targetInsertIndex = -1;
+    // If position is 'after', we need to find the line to insert after
+    // The afterLine was given in original line numbers, but we need to adjust for removed lines
+    let adjustedAfterLine = afterLine;
+    if (afterLine !== undefined && taskLine < afterLine) {
+        // Task was removed from before afterLine, so adjust
+        adjustedAfterLine = afterLine - taskLines.length;
+    }
     for (let j = 0; j < newLines.length; j++) {
         const sectionMatch = newLines[j].match(/^##\s+(.+)$/);
         if (sectionMatch) {
-            // Compare section titles (normalize by trimming)
             const sectionTitle = sectionMatch[1].trim();
             if (sectionTitle === targetSectionTitle || sectionTitle.startsWith(targetSectionTitle)) {
                 if (position === 'top') {
@@ -1267,8 +1250,26 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
                     }
                     targetInsertIndex = insertAfterHeader;
                 }
+                else if (position === 'after' && adjustedAfterLine !== undefined) {
+                    // Find the task at adjustedAfterLine and insert after it and its children
+                    const afterIndex = adjustedAfterLine - 1; // Convert to 0-indexed
+                    if (afterIndex >= 0 && afterIndex < newLines.length) {
+                        const afterTaskIndent = newLines[afterIndex]?.match(/^(\s*)/)?.[1].length ?? 0;
+                        let insertAfter = afterIndex + 1;
+                        // Skip over children of the after task
+                        while (insertAfter < newLines.length) {
+                            const currentLine = newLines[insertAfter];
+                            const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+                            if (currentLine.trim() === '' || currentIndent <= afterTaskIndent) {
+                                break;
+                            }
+                            insertAfter++;
+                        }
+                        targetInsertIndex = insertAfter;
+                    }
+                }
                 else {
-                    // Find the end of this section (next ## or end of file)
+                    // 'bottom' - Find the end of this section
                     let endOfSection = j + 1;
                     while (endOfSection < newLines.length) {
                         if (newLines[endOfSection].match(/^##\s+/)) {
@@ -1276,7 +1277,6 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
                         }
                         endOfSection++;
                     }
-                    // Insert before the next section or at end
                     targetInsertIndex = endOfSection;
                 }
                 break;
@@ -1307,7 +1307,7 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
     }
     return cleaned.join(lineEnding);
 }
-function moveTaskToParent(content, taskLine, parentLine, position = 'bottom') {
+function moveTaskToParent(content, taskLine, parentLine, position = 'bottom', afterLine) {
     // Detect line ending style
     const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
     const lines = content.split(/\r?\n/);
@@ -1376,8 +1376,33 @@ function moveTaskToParent(content, taskLine, parentLine, position = 'bottom') {
         // Insert right after parent line
         insertIndex = adjustedParentIndex + 1;
     }
+    else if (position === 'after' && afterLine !== undefined) {
+        // Calculate adjusted afterLine
+        let adjustedAfterLine = afterLine;
+        if (taskIndex < afterLine) {
+            adjustedAfterLine = afterLine - originalTaskBlockLength;
+        }
+        const afterIndex = adjustedAfterLine - 1; // Convert to 0-indexed
+        if (afterIndex >= 0 && afterIndex < newLines.length) {
+            // Find end of the "after" task's children
+            const afterTaskIndent = newLines[afterIndex]?.match(/^(\s*)/)?.[1].length ?? 0;
+            insertIndex = afterIndex + 1;
+            while (insertIndex < newLines.length) {
+                const currentLine = newLines[insertIndex];
+                const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+                if (currentLine.trim() === '' || currentIndent <= afterTaskIndent) {
+                    break;
+                }
+                insertIndex++;
+            }
+        }
+        else {
+            // Fallback to end of parent's children
+            insertIndex = adjustedParentIndex + 1;
+        }
+    }
     else {
-        // Find end of parent's children
+        // 'bottom' - Find end of parent's children
         insertIndex = adjustedParentIndex + 1;
         while (insertIndex < newLines.length) {
             const currentLine = newLines[insertIndex];

@@ -1,54 +1,3 @@
-import { Board, Task, Column } from './parser';
-
-function serializeTask(task: Task, indent: number = 0): string[] {
-  const lines: string[] = [];
-  const prefix = ' '.repeat(indent);
-  const checkbox = task.checked ? '[x]' : '[ ]';
-  lines.push(`${prefix}- ${checkbox} ${task.text}`);
-
-  for (const child of task.children) {
-    lines.push(...serializeTask(child, indent + 2));
-  }
-
-  return lines;
-}
-
-function serializeColumn(column: Column): string[] {
-  const lines: string[] = [];
-  lines.push(`## ${column.title}`);
-  lines.push('');
-
-  for (const task of column.tasks) {
-    lines.push(...serializeTask(task));
-  }
-
-  lines.push('');
-  return lines;
-}
-
-export function serializeBoard(board: Board): string {
-  const lines: string[] = [];
-
-  if (board.title) {
-    lines.push(`# ${board.title}`);
-    lines.push('');
-  }
-
-  if (board.description) {
-    const descLines = board.description.split('\n');
-    for (const descLine of descLines) {
-      lines.push(`> ${descLine}`);
-    }
-    lines.push('');
-  }
-
-  for (const column of board.columns) {
-    lines.push(...serializeColumn(column));
-  }
-
-  return lines.join('\n');
-}
-
 export function toggleTaskInContent(content: string, line: number, checked: boolean): string {
   // Detect line ending style
   const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
@@ -79,7 +28,8 @@ export function moveTaskInContent(
   content: string,
   taskLine: number,
   targetSectionTitle: string,
-  position: 'top' | 'bottom' = 'bottom'
+  position: 'top' | 'bottom' | 'after' = 'bottom',
+  afterLine?: number
 ): string {
   // Detect line ending style
   const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
@@ -124,12 +74,20 @@ export function moveTaskInContent(
   const afterTask = lines.slice(lineIndex + taskLines.length);
   const newLines = [...beforeTask, ...afterTask];
 
-  // Find the target section and insert at top or bottom
+  // Find the target section and insert position
   let targetInsertIndex = -1;
+
+  // If position is 'after', we need to find the line to insert after
+  // The afterLine was given in original line numbers, but we need to adjust for removed lines
+  let adjustedAfterLine = afterLine;
+  if (afterLine !== undefined && taskLine < afterLine) {
+    // Task was removed from before afterLine, so adjust
+    adjustedAfterLine = afterLine - taskLines.length;
+  }
+
   for (let j = 0; j < newLines.length; j++) {
     const sectionMatch = newLines[j].match(/^##\s+(.+)$/);
     if (sectionMatch) {
-      // Compare section titles (normalize by trimming)
       const sectionTitle = sectionMatch[1].trim();
       if (sectionTitle === targetSectionTitle || sectionTitle.startsWith(targetSectionTitle)) {
         if (position === 'top') {
@@ -139,8 +97,25 @@ export function moveTaskInContent(
             insertAfterHeader++;
           }
           targetInsertIndex = insertAfterHeader;
+        } else if (position === 'after' && adjustedAfterLine !== undefined) {
+          // Find the task at adjustedAfterLine and insert after it and its children
+          const afterIndex = adjustedAfterLine - 1; // Convert to 0-indexed
+          if (afterIndex >= 0 && afterIndex < newLines.length) {
+            const afterTaskIndent = newLines[afterIndex]?.match(/^(\s*)/)?.[1].length ?? 0;
+            let insertAfter = afterIndex + 1;
+            // Skip over children of the after task
+            while (insertAfter < newLines.length) {
+              const currentLine = newLines[insertAfter];
+              const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+              if (currentLine.trim() === '' || currentIndent <= afterTaskIndent) {
+                break;
+              }
+              insertAfter++;
+            }
+            targetInsertIndex = insertAfter;
+          }
         } else {
-          // Find the end of this section (next ## or end of file)
+          // 'bottom' - Find the end of this section
           let endOfSection = j + 1;
           while (endOfSection < newLines.length) {
             if (newLines[endOfSection].match(/^##\s+/)) {
@@ -148,7 +123,6 @@ export function moveTaskInContent(
             }
             endOfSection++;
           }
-          // Insert before the next section or at end
           targetInsertIndex = endOfSection;
         }
         break;
@@ -188,7 +162,8 @@ export function moveTaskToParent(
   content: string,
   taskLine: number,
   parentLine: number,
-  position: 'top' | 'bottom' = 'bottom'
+  position: 'top' | 'bottom' | 'after' = 'bottom',
+  afterLine?: number
 ): string {
   // Detect line ending style
   const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
@@ -270,8 +245,31 @@ export function moveTaskToParent(
   if (position === 'top') {
     // Insert right after parent line
     insertIndex = adjustedParentIndex + 1;
+  } else if (position === 'after' && afterLine !== undefined) {
+    // Calculate adjusted afterLine
+    let adjustedAfterLine = afterLine;
+    if (taskIndex < afterLine) {
+      adjustedAfterLine = afterLine - originalTaskBlockLength;
+    }
+    const afterIndex = adjustedAfterLine - 1; // Convert to 0-indexed
+    if (afterIndex >= 0 && afterIndex < newLines.length) {
+      // Find end of the "after" task's children
+      const afterTaskIndent = newLines[afterIndex]?.match(/^(\s*)/)?.[1].length ?? 0;
+      insertIndex = afterIndex + 1;
+      while (insertIndex < newLines.length) {
+        const currentLine = newLines[insertIndex];
+        const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+        if (currentLine.trim() === '' || currentIndent <= afterTaskIndent) {
+          break;
+        }
+        insertIndex++;
+      }
+    } else {
+      // Fallback to end of parent's children
+      insertIndex = adjustedParentIndex + 1;
+    }
   } else {
-    // Find end of parent's children
+    // 'bottom' - Find end of parent's children
     insertIndex = adjustedParentIndex + 1;
     while (insertIndex < newLines.length) {
       const currentLine = newLines[insertIndex];

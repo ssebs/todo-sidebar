@@ -44,6 +44,7 @@ class KanbanViewProvider {
     _activeFileUri;
     _board;
     _disposables = [];
+    _pendingEditLine;
     constructor(_context) {
         this._context = _context;
     }
@@ -61,7 +62,7 @@ class KanbanViewProvider {
                     await this._handleToggle(message.line, message.checked, message.targetColumn);
                     break;
                 case 'move':
-                    await this._handleMove(message.taskLine, message.targetSection, message.position);
+                    await this._handleMove(message.taskLine, message.targetSection, message.position, message.afterLine);
                     break;
                 case 'openAtLine':
                     await this._handleOpenAtLine(message.line);
@@ -77,7 +78,7 @@ class KanbanViewProvider {
                     }
                     break;
                 case 'moveToParent':
-                    await this._handleMoveToParent(message.taskLine, message.parentLine, message.position);
+                    await this._handleMoveToParent(message.taskLine, message.parentLine, message.position, message.afterLine);
                     break;
                 case 'addTask':
                     await this._handleAddTask(message.section);
@@ -93,11 +94,15 @@ class KanbanViewProvider {
         // Set up file watchers
         this._setupFileWatchers();
         // Restore previously selected file
-        const savedUri = this._context.workspaceState.get('todoSidebar.activeFile');
-        console.log('Restoring saved URI:', savedUri);
-        if (savedUri) {
-            this._activeFileUri = vscode.Uri.parse(savedUri);
-            this._refresh();
+        const savedPath = this._context.workspaceState.get('todoSidebar.activeFile');
+        if (savedPath) {
+            try {
+                this._activeFileUri = vscode.Uri.file(savedPath);
+                this._refresh();
+            }
+            catch (e) {
+                console.error('Failed to restore saved file:', e);
+            }
         }
     }
     _setupFileWatchers() {
@@ -118,8 +123,8 @@ class KanbanViewProvider {
     }
     async setActiveFile(uri) {
         this._activeFileUri = uri;
-        console.log('Saving active file:', uri.toString());
-        await this._context.workspaceState.update('todoSidebar.activeFile', uri.toString());
+        // Store the fsPath for reliable restoration across sessions
+        await this._context.workspaceState.update('todoSidebar.activeFile', uri.fsPath);
         await this._refresh();
     }
     async refresh() {
@@ -133,7 +138,9 @@ class KanbanViewProvider {
             const content = await vscode.workspace.fs.readFile(this._activeFileUri);
             const text = Buffer.from(content).toString('utf-8');
             this._board = (0, parser_1.parseMarkdown)(text);
-            this._view.webview.postMessage({ type: 'update', board: this._board });
+            const editLine = this._pendingEditLine;
+            this._pendingEditLine = undefined;
+            this._view.webview.postMessage({ type: 'update', board: this._board, editLine });
         }
         catch (error) {
             console.error('Error refreshing kanban board:', error);
@@ -190,28 +197,28 @@ class KanbanViewProvider {
         }
         return undefined;
     }
-    async _handleMove(taskLine, targetSection, position = 'bottom') {
+    async _handleMove(taskLine, targetSection, position = 'bottom', afterLine) {
         if (!this._activeFileUri) {
             return;
         }
         try {
             const content = await vscode.workspace.fs.readFile(this._activeFileUri);
             let text = Buffer.from(content).toString('utf-8');
-            text = (0, serializer_1.moveTaskInContent)(text, taskLine, targetSection, position);
+            text = (0, serializer_1.moveTaskInContent)(text, taskLine, targetSection, position, afterLine);
             await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
         }
         catch (error) {
             console.error('Error moving task:', error);
         }
     }
-    async _handleMoveToParent(taskLine, parentLine, position = 'bottom') {
+    async _handleMoveToParent(taskLine, parentLine, position = 'bottom', afterLine) {
         if (!this._activeFileUri) {
             return;
         }
         try {
             const content = await vscode.workspace.fs.readFile(this._activeFileUri);
             let text = Buffer.from(content).toString('utf-8');
-            text = (0, serializer_1.moveTaskToParent)(text, taskLine, parentLine, position);
+            text = (0, serializer_1.moveTaskToParent)(text, taskLine, parentLine, position, afterLine);
             await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
         }
         catch (error) {
@@ -242,9 +249,8 @@ class KanbanViewProvider {
             const text = Buffer.from(content).toString('utf-8');
             const result = (0, serializer_1.addTaskToSection)(text, section);
             if (result.line > 0) {
+                this._pendingEditLine = result.line;
                 await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
-                // Tell webview to enter edit mode on the new task
-                this._view?.webview.postMessage({ type: 'editTask', line: result.line });
             }
         }
         catch (error) {
@@ -274,9 +280,8 @@ class KanbanViewProvider {
             const text = Buffer.from(content).toString('utf-8');
             const result = (0, serializer_1.addSubtaskToParent)(text, parentLine);
             if (result.line > 0) {
+                this._pendingEditLine = result.line;
                 await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
-                // Tell webview to enter edit mode on the new subtask
-                this._view?.webview.postMessage({ type: 'editTask', line: result.line });
             }
         }
         catch (error) {
@@ -416,14 +421,9 @@ class KanbanViewProvider {
     .children {
       margin-left: 20px;
       margin-top: 4px;
+      min-height: 10px;
       font-size: 0.9em;
       color: var(--vscode-descriptionForeground);
-    }
-    .child-item {
-      margin: 2px 0;
-    }
-    .children {
-      min-height: 10px;
     }
     .child-task {
       background: var(--vscode-input-background);
@@ -615,8 +615,6 @@ class KanbanViewProvider {
       setupEventListeners();
     }
 
-    let pendingUncheckLine = null;
-
     function showColumnPicker(columns, taskLine) {
       // Filter out the Done column - user shouldn't move back to Done
       const availableColumns = columns.filter(c => !c.isDoneColumn);
@@ -788,16 +786,24 @@ class KanbanViewProvider {
 
             if (targetParentLine) {
               // Dropped into a parent task's children area
+              const prevSibling = evt.item.previousElementSibling;
+              const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
               vscode.postMessage({
                 type: 'moveToParent',
                 taskLine,
                 parentLine: parseInt(targetParentLine),
-                position: newIndex === 0 ? 'top' : 'bottom'
+                position: newIndex === 0 ? 'top' : 'after',
+                afterLine
               });
             } else if (targetSection) {
-              // Dropped into a column
-              const position = newIndex === 0 ? 'top' : 'bottom';
-              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+              // Dropped into a column - find what we're after
+              const prevSibling = evt.item.previousElementSibling;
+              if (newIndex === 0 || !prevSibling) {
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+              } else {
+                const afterLine = parseInt(prevSibling.dataset.line);
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
+              }
             }
           }
         });
@@ -819,16 +825,24 @@ class KanbanViewProvider {
 
             if (targetParentLine) {
               // Dropped into a parent task's children area
+              const prevSibling = evt.item.previousElementSibling;
+              const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
               vscode.postMessage({
                 type: 'moveToParent',
                 taskLine,
                 parentLine: parseInt(targetParentLine),
-                position: newIndex === 0 ? 'top' : 'bottom'
+                position: newIndex === 0 ? 'top' : 'after',
+                afterLine
               });
             } else if (targetSection) {
               // Promoted to column level (dragged out of parent)
-              const position = newIndex === 0 ? 'top' : 'bottom';
-              vscode.postMessage({ type: 'move', taskLine, targetSection, position });
+              const prevSibling = evt.item.previousElementSibling;
+              if (newIndex === 0 || !prevSibling) {
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+              } else {
+                const afterLine = parseInt(prevSibling.dataset.line);
+                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
+              }
             }
           }
         });
@@ -841,16 +855,15 @@ class KanbanViewProvider {
       if (message.type === 'update') {
         board = message.board;
         updateUI();
-      } else if (message.type === 'columnsForPicker') {
-        showColumnPicker(message.columns, message.taskLine);
-      } else if (message.type === 'editTask') {
-        // Enter edit mode on newly added task after refresh
-        setTimeout(() => {
-          const taskElement = document.querySelector(\`[data-line="\${message.line}"]\`);
+        // Enter edit mode on newly added task if specified
+        if (message.editLine) {
+          const taskElement = document.querySelector(\`[data-line="\${message.editLine}"]\`);
           if (taskElement) {
             enterEditMode(taskElement);
           }
-        }, 100);
+        }
+      } else if (message.type === 'columnsForPicker') {
+        showColumnPicker(message.columns, message.taskLine);
       }
     });
   </script>

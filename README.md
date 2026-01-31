@@ -21,12 +21,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 
 ## TODO
-- Persistent files broken
-  - Esp when closing the MD file or panel
-- Double check creating sub items & editing inline
-- Dragging bottom items up broken
-- Editing newly created sub item doesnt work
-  
+
 
 ## Markdown Format
 
