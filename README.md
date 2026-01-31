@@ -32,10 +32,15 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - Drag tasks between columns, check/uncheck to toggle status
 - Check the boxes to mark tasks as done
 
+## Screenshot / gif
+
+![Usage vid](/img/Usage.webp)
+
 ## TODO
 
 - Cleanup the code
   - See `PLAN.md`
+- MD file doesn't persist when closing the panel
 - Save md file to use in workspace settings json
 - delete button on rows
 

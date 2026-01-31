@@ -4,20 +4,25 @@
 
 ## In Progress 🚀
 
-- [ ] Groceries
-  - [ ] Apples
-  - [ ] Milk
+- [ ] Test item 3
+
 - [ ] Create the extension
   - [x] vibe code it
   - [x] make it work
   - [ ] cleanup the code
-- [ ] Test item 3
 
 ## Backlog 📋
 
+- [ ] something else
+  - [ ] New task
 - [ ] Rewrite in rust
 
 ## Done ✅
+
+- [x] Groceries
+  - [x] Milk
+  - [x] Oranges
+  - [x] Apples
 
 - [x] start the readme
 - [x] Sub thing
