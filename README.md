@@ -18,16 +18,25 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 ## Usage
 
-- Open the **Todo Board panel** in the sidebar
-- Run command: **Todo Sidebar: Open Markdown File**
-- Select your markdown file
+### Initial Setup
+- Create H2 sections in your MD file
+  - **IMPORTANT:** Make sure to create a "Done" section
+  - Just include the word "done", and only have 1
+- Run VSCode command: **Todo Sidebar: Open Markdown File**
+  - Select your markdown file
+- Toggle VSCode Secondary Sidebar (CTRL + ALT + B) (or CMD + ALT + B on Mac)
+  - Drag the Todo Sidebar icon from the left bar to the right (see gif)
+
+### Using it
+- Click the + to add a task, or the arrow to open in the editor
 - Drag tasks between columns, check/uncheck to toggle status
-- You can move this panel to the right by dragging it over
+- Check the boxes to mark tasks as done
 
 ## TODO
 
-- cleanup the code
+- Cleanup the code
   - See `PLAN.md`
+- Save md file to use in workspace settings json
 - delete button on rows
 
 ## Markdown Format

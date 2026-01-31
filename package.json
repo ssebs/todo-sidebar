@@ -16,7 +16,7 @@
       "activitybar": [
         {
           "id": "todo-sidebar",
-          "title": "Todo Board",
+          "title": "Todo Sidebar",
           "icon": "$(checklist)"
         }
       ]
