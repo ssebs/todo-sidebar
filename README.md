@@ -74,4 +74,4 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 ## LICENSE
 
-[Apache v2](./LICENSE)
+[Apache v2](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/LICENSE)

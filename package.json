@@ -1,6 +1,10 @@
 {
   "name": "todo-sidebar",
   "displayName": "Todo Sidebar",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ssebs/todo-sidebar.git"
+  },
   "description": "A Kanban-style todo board in the sidebar, parsed from Markdown",
   "version": "0.0.1",
   "engines": {
