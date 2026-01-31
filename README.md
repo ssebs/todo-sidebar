@@ -8,11 +8,13 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 - **Markdown-powered** - Your todos live in plain `.md` files, not a proprietary format
 - **Kanban board view** - Visualize tasks across columns defined by `## Headers`
+- **Live sync** - Changes in the editor instantly update the board and vice versa
 - **Drag and drop** - Move tasks between columns or nest them under parent tasks
+- **Nested tasks** - Support for subtasks
+- **Add tasks** - Click "+" to add tasks to columns or subtasks to existing tasks
+- **Inline editing** - Double-click any task to edit its text
 - **Checkbox support** - Works with `- [ ]`/`- [x]` and unicode `☐`/`☑` checkboxes
 - **Auto-move to Done** - Checking a task automatically moves it to your Done column
-- **Nested tasks** - Support for subtasks and plain bullet children
-- **Live sync** - Changes in the editor instantly update the board and vice versa
 
 ## Usage
 
@@ -29,7 +31,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 ## Markdown Format
 
-````md
+```md
 # Board Title
 
 > Optional description
@@ -37,42 +39,24 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ## In Progress
 
 - [ ] Task 1
-  - [ ] Subtask
-  - Plain bullet note
-- [x] Completed task
+- [ ] Task 2
+  - [ ] Subtask 1
+  - [ ] Subtask 2
+
+## Backlog
+
+- [ ] Task 3
+  - [ ] Subtask 1
+  - [ ] Subtask 2
+- [ ] Task 4
 
 ## Done
 
 - [x] Finished item
+- [x] Another thing
+  - [x] Sub other thing
 
-## TODO
-
-- Add new task from extension
-- Edit text on text click
-
-### Kanban planning format
-
-```md
-# TODO
-
-> Description
-
-## In Progress 🚀
-
-- [ ] start the readme
-- [ ] create the extension
-  - [ ] do the mvp
-
-## Backlog 📋
-
-- [ ] Make it good
-
-## Done ✅
-
-- [x] Create this example MD
-- [x] A second thing
 ```
-````
 
 ## LICENSE
 
