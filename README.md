@@ -34,7 +34,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 ## Screenshot / gif
 
-![Usage vid](/img/Usage.webp)
+![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
 
