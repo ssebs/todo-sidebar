@@ -44,7 +44,18 @@
         "command": "todoSidebar.refresh",
         "title": "Todo Sidebar: Refresh"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Todo Sidebar",
+      "properties": {
+        "todoSidebar.activeFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the currently active markdown file for the todo board",
+          "scope": "window"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

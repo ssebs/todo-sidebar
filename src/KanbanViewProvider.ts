@@ -27,6 +27,13 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
+    // Handle visibility changes - refresh when panel becomes visible
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible && this._activeFileUri) {
+        this._refresh();
+      }
+    });
+
     // Handle messages from webview
     webviewView.webview.onDidReceiveMessage(async (message) => {
       switch (message.type) {
@@ -69,15 +76,16 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       this._setupFileWatchers();
     }
 
-    // Restore file: use existing activeFileUri or load from saved state
-    if (!this._activeFileUri) {
-      const savedPath = this._context.workspaceState.get<string>('todoSidebar.activeFile');
-      if (savedPath) {
-        try {
-          this._activeFileUri = vscode.Uri.file(savedPath);
-        } catch (e) {
-          console.error('Failed to restore saved file:', e);
-        }
+    // Restore file from workspace settings
+    const config = vscode.workspace.getConfiguration('todoSidebar');
+    const savedPath = config.get<string>('activeFile');
+    console.log('Attempting to restore activeFile from settings:', savedPath);
+    if (savedPath) {
+      try {
+        this._activeFileUri = vscode.Uri.file(savedPath);
+        console.log('Restored activeFile:', this._activeFileUri.fsPath);
+      } catch (e) {
+        console.error('Failed to restore saved file:', e);
       }
     }
 
@@ -111,8 +119,46 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
   public async setActiveFile(uri: vscode.Uri) {
     this._activeFileUri = uri;
-    // Store the fsPath for reliable restoration across sessions
-    await this._context.workspaceState.update('todoSidebar.activeFile', uri.fsPath);
+    // Store in workspace settings for reliable persistence
+    try {
+      const config = vscode.workspace.getConfiguration('todoSidebar');
+      const hasWorkspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
+
+      console.log('Workspace info:', {
+        hasWorkspaceFolder,
+        workspaceFile: vscode.workspace.workspaceFile?.toString(),
+        workspaceFolders: vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath)
+      });
+
+      if (!hasWorkspaceFolder) {
+        console.error('No workspace folder open - cannot save to workspace settings');
+        vscode.window.showWarningMessage('Please open a folder/workspace to persist the todo file selection');
+        await this._refresh();
+        return;
+      }
+
+      // Use WorkspaceFolder target to write to .vscode/settings.json
+      await config.update('activeFile', uri.fsPath, vscode.ConfigurationTarget.WorkspaceFolder);
+      console.log('Saved activeFile to workspace settings:', uri.fsPath);
+
+      // Verify it was saved
+      const verifyConfig = vscode.workspace.getConfiguration('todoSidebar');
+      const savedValue = verifyConfig.get<string>('activeFile');
+      console.log('Verification - value in config:', savedValue);
+
+      // Check if .vscode/settings.json exists
+      if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0]) {
+        const settingsPath = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.vscode', 'settings.json');
+        try {
+          const settingsContent = await vscode.workspace.fs.readFile(settingsPath);
+          console.log('Settings file content:', Buffer.from(settingsContent).toString('utf-8'));
+        } catch (e) {
+          console.log('Settings file does not exist or cannot be read:', settingsPath.fsPath);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to save activeFile to settings:', e);
+    }
     await this._refresh();
   }
 
