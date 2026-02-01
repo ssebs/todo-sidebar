@@ -177,14 +177,28 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     await this._refresh();
   }
 
+  private async _readActiveFile(): Promise<string> {
+    if (!this._activeFileUri) {
+      return '';
+    }
+    const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+    return Buffer.from(content).toString('utf-8');
+  }
+
+  private async _writeActiveFile(text: string): Promise<void> {
+    if (!this._activeFileUri) {
+      return;
+    }
+    await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+  }
+
   private async _refresh() {
     if (!this._activeFileUri || !this._view) {
       return;
     }
 
     try {
-      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-      const text = Buffer.from(content).toString('utf-8');
+      const text = await this._readActiveFile();
       this._board = parseMarkdown(text);
       const editLine = this._pendingEditLine;
       this._pendingEditLine = undefined;
@@ -200,8 +214,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-      let text = Buffer.from(content).toString('utf-8');
+      let text = await this._readActiveFile();
 
       // Toggle the checkbox
       text = toggleTaskInContent(text, line, checked);
@@ -223,7 +236,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         text = moveTaskInContent(text, line, targetColumn, 'top');
       }
 
-      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+      await this._writeActiveFile(text);
     } catch (error) {
       console.error('Error toggling task:', error);
     }
@@ -276,10 +289,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-      let text = Buffer.from(content).toString('utf-8');
+      let text = await this._readActiveFile();
       text = moveTaskInContent(text, taskLine, targetSection, position, afterLine);
-      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+      await this._writeActiveFile(text);
     } catch (error) {
       console.error('Error moving task:', error);
     }
@@ -291,10 +303,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-      let text = Buffer.from(content).toString('utf-8');
+      let text = await this._readActiveFile();
       text = moveTaskToParent(text, taskLine, parentLine, position, afterLine);
-      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+      await this._writeActiveFile(text);
     } catch (error) {
       console.error('Error moving task to parent:', error);
     }
@@ -322,13 +333,12 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-      const text = Buffer.from(content).toString('utf-8');
+      const text = await this._readActiveFile();
       const result = addTaskToSection(text, section);
 
       if (result.line > 0) {
         this._pendingEditLine = result.line;
-        await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
+        await this._writeActiveFile(result.content);
       }
     } catch (error) {
       console.error('Error adding task:', error);
@@ -341,10 +351,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-      let text = Buffer.from(content).toString('utf-8');
+      let text = await this._readActiveFile();
       text = editTaskTextInContent(text, line, newText);
-      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+      await this._writeActiveFile(text);
     } catch (error) {
       console.error('Error editing task text:', error);
     }
@@ -356,13 +365,12 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const content = await vscode.workspace.fs.readFile(this._activeFileUri);
-      const text = Buffer.from(content).toString('utf-8');
+      const text = await this._readActiveFile();
       const result = addSubtaskToParent(text, parentLine);
 
       if (result.line > 0) {
         this._pendingEditLine = result.line;
-        await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(result.content, 'utf-8'));
+        await this._writeActiveFile(result.content);
       }
     } catch (error) {
       console.error('Error adding subtask:', error);

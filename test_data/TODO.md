@@ -2,6 +2,24 @@
 
 > This is a list of tasks
 
+## This is a separate section.
+> it should be regular markdown
+
+### h3
+- item
+- item 2
+  - sub item
+
+---
+
+dashes
+
+```py
+
+print("test")
+```
+
+
 ## In Progress 🚀
 
 - [ ] Test item 3
@@ -18,6 +36,12 @@
 - [ ] Rewrite in rust
 
 ## Done ✅
+
+- [x] asdas
+
+- [x] New task
+  - [x] New task1
+  - [x] New task2
 
 - [x] Groceries
   - [x] Milk

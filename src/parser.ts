@@ -19,6 +19,16 @@ export interface Board {
   columns: Column[];
 }
 
+// Regex constants for parsing markdown patterns
+const TITLE_REGEX = /^#\s+([^#].*)$/;
+const DESCRIPTION_REGEX = /^>\s*(.*)$/;
+const COLUMN_HEADER_REGEX = /^##\s+(.+)$/;
+const MD_TASK_REGEX = /^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/;
+const UNICODE_TASK_REGEX = /^(\s*)[-*]\s+([☐☑✓✗])\s+(.+)$/;
+const NESTED_QUOTE_REGEX = /^(\s*)[-*]\s+>\s*(.+)$/;
+const BULLET_REGEX = /^(\s+)[-*]\s+(.+)$/;
+const CHECKBOX_PREFIX_REGEX = /^\[[ xX]\]|^[☐☑✓✗]/;
+
 export function parseMarkdown(content: string): Board {
   // Normalize line endings (handle Windows \r\n and Mac \r)
   const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -39,14 +49,14 @@ export function parseMarkdown(content: string): Board {
 
     // Board title: # Title (only before first column)
     if (!foundFirstColumn) {
-      const titleMatch = line.match(/^#\s+([^#].*)$/);
+      const titleMatch = line.match(TITLE_REGEX);
       if (titleMatch) {
         board.title = titleMatch[1].trim();
         continue;
       }
 
       // Description: > text (only before first column, not indented)
-      const descMatch = line.match(/^>\s*(.*)$/);
+      const descMatch = line.match(DESCRIPTION_REGEX);
       if (descMatch) {
         if (board.description) {
           board.description += '\n' + descMatch[1];
@@ -58,7 +68,7 @@ export function parseMarkdown(content: string): Board {
     }
 
     // Column header: ## Section
-    const columnMatch = line.match(/^##\s+(.+)$/);
+    const columnMatch = line.match(COLUMN_HEADER_REGEX);
     if (columnMatch) {
       foundFirstColumn = true;
       const title = columnMatch[1].trim();
@@ -74,7 +84,7 @@ export function parseMarkdown(content: string): Board {
     }
 
     // Task with markdown checkbox: - [ ] or - [x] or * [ ] or * [x]
-    const taskMatch = line.match(/^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/);
+    const taskMatch = line.match(MD_TASK_REGEX);
     if (taskMatch && currentColumn) {
       const indent = taskMatch[1].length;
       const checked = taskMatch[2].toLowerCase() === 'x';
@@ -106,7 +116,7 @@ export function parseMarkdown(content: string): Board {
     }
 
     // Task with unicode checkbox: * ☐ or * ☑ or - ☐ or - ☑
-    const unicodeTaskMatch = line.match(/^(\s*)[-*]\s+([☐☑✓✗])\s+(.+)$/);
+    const unicodeTaskMatch = line.match(UNICODE_TASK_REGEX);
     if (unicodeTaskMatch && currentColumn) {
       const indent = unicodeTaskMatch[1].length;
       const checkChar = unicodeTaskMatch[2];
@@ -136,7 +146,7 @@ export function parseMarkdown(content: string): Board {
     }
 
     // Nested item with > prefix (like "  * > really good")
-    const nestedQuoteMatch = line.match(/^(\s*)[-*]\s+>\s*(.+)$/);
+    const nestedQuoteMatch = line.match(NESTED_QUOTE_REGEX);
     if (nestedQuoteMatch && taskStack.length > 0) {
       const text = nestedQuoteMatch[2].trim();
 
@@ -154,13 +164,13 @@ export function parseMarkdown(content: string): Board {
     }
 
     // Nested bullet point: - item or * item (without checkbox, indented)
-    const bulletMatch = line.match(/^(\s+)[-*]\s+(.+)$/);
+    const bulletMatch = line.match(BULLET_REGEX);
     if (bulletMatch && taskStack.length > 0) {
       const indent = bulletMatch[1].length;
       const text = bulletMatch[2].trim();
 
       // Skip if it looks like a checkbox we didn't match
-      if (text.match(/^\[[ xX]\]/) || text.match(/^[☐☑✓✗]/)) {
+      if (text.match(CHECKBOX_PREFIX_REGEX)) {
         continue;
       }
 

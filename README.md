@@ -37,7 +37,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
-
+- ensure that other MD in the file is left alone.
 - When you open the extension without any file saved, pick a file automatically
 - Cleanup the code
 - delete button on rows

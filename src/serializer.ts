@@ -1,22 +1,40 @@
-export function toggleTaskInContent(content: string, line: number, checked: boolean): string {
-  // Detect line ending style
+// Regex constants for checkbox and indentation patterns
+const INDENT_REGEX = /^(\s*)/;
+const MD_CHECKBOX_UNCHECKED_REGEX = /([-*]\s+)\[ \]/;
+const MD_CHECKBOX_CHECKED_REGEX = /([-*]\s+)\[[xX]\]/;
+const UNICODE_CHECKBOX_UNCHECKED_REGEX = /([-*]\s+)☐/;
+const UNICODE_CHECKBOX_CHECKED_REGEX = /([-*]\s+)[☑✓]/;
+const TASK_WITH_MD_CHECKBOX_REGEX = /^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.+)$/;
+const TASK_TEXT_MD_CHECKBOX_REGEX = /^(\s*[-*]\s+\[[ xX]\]\s+)(.+)$/;
+const TASK_TEXT_UNICODE_CHECKBOX_REGEX = /^(\s*[-*]\s+[☐☑✓✗]\s+)(.+)$/;
+const SECTION_HEADER_REGEX = /^##\s+(.+)$/;
+
+/**
+ * Helper function to parse content into lines while preserving line ending style
+ */
+function parseContentLines(content: string): { lines: string[]; lineEnding: string } {
   const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
   const lines = content.split(/\r?\n/);
+  return { lines, lineEnding };
+}
+
+export function toggleTaskInContent(content: string, line: number, checked: boolean): string {
+  const { lines, lineEnding } = parseContentLines(content);
   const lineIndex = line - 1; // Convert to 0-indexed
 
   if (lineIndex >= 0 && lineIndex < lines.length) {
     const currentLine = lines[lineIndex];
     if (checked) {
       // Handle markdown checkboxes: - [ ] or * [ ]
-      let newLine = currentLine.replace(/([-*]\s+)\[ \]/, '$1[x]');
+      let newLine = currentLine.replace(MD_CHECKBOX_UNCHECKED_REGEX, '$1[x]');
       // Handle unicode checkboxes: ☐ -> ☑
-      newLine = newLine.replace(/([-*]\s+)☐/, '$1☑');
+      newLine = newLine.replace(UNICODE_CHECKBOX_UNCHECKED_REGEX, '$1☑');
       lines[lineIndex] = newLine;
     } else {
       // Handle markdown checkboxes: - [x] or * [x]
-      let newLine = currentLine.replace(/([-*]\s+)\[[xX]\]/, '$1[ ]');
+      let newLine = currentLine.replace(MD_CHECKBOX_CHECKED_REGEX, '$1[ ]');
       // Handle unicode checkboxes: ☑ or ✓ -> ☐
-      newLine = newLine.replace(/([-*]\s+)[☑✓]/, '$1☐');
+      newLine = newLine.replace(UNICODE_CHECKBOX_CHECKED_REGEX, '$1☐');
       lines[lineIndex] = newLine;
     }
   }
@@ -31,14 +49,12 @@ export function moveTaskInContent(
   position: 'top' | 'bottom' | 'after' = 'bottom',
   afterLine?: number
 ): string {
-  // Detect line ending style
-  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
+  const { lines, lineEnding } = parseContentLines(content);
   const lineIndex = taskLine - 1;
 
   // Find the task and all its children (indented lines below it)
   const taskLines: string[] = [];
-  const taskIndent = lines[lineIndex]?.match(/^(\s*)/)?.[1].length ?? 0;
+  const taskIndent = lines[lineIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
 
   // Add the task line
   taskLines.push(lines[lineIndex]);
@@ -47,7 +63,7 @@ export function moveTaskInContent(
   let i = lineIndex + 1;
   while (i < lines.length) {
     const currentLine = lines[i];
-    const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+    const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
 
     // Empty line or line with content at same/less indentation ends the block
     if (currentLine.trim() === '') {
@@ -86,7 +102,7 @@ export function moveTaskInContent(
   }
 
   for (let j = 0; j < newLines.length; j++) {
-    const sectionMatch = newLines[j].match(/^##\s+(.+)$/);
+    const sectionMatch = newLines[j].match(SECTION_HEADER_REGEX);
     if (sectionMatch) {
       const sectionTitle = sectionMatch[1].trim();
       if (sectionTitle === targetSectionTitle || sectionTitle.startsWith(targetSectionTitle)) {
@@ -101,12 +117,12 @@ export function moveTaskInContent(
           // Find the task at adjustedAfterLine and insert after it and its children
           const afterIndex = adjustedAfterLine - 1; // Convert to 0-indexed
           if (afterIndex >= 0 && afterIndex < newLines.length) {
-            const afterTaskIndent = newLines[afterIndex]?.match(/^(\s*)/)?.[1].length ?? 0;
+            const afterTaskIndent = newLines[afterIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
             let insertAfter = afterIndex + 1;
             // Skip over children of the after task
             while (insertAfter < newLines.length) {
               const currentLine = newLines[insertAfter];
-              const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+              const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
               if (currentLine.trim() === '' || currentIndent <= afterTaskIndent) {
                 break;
               }
@@ -118,7 +134,7 @@ export function moveTaskInContent(
           // 'bottom' - Find the end of this section
           let endOfSection = j + 1;
           while (endOfSection < newLines.length) {
-            if (newLines[endOfSection].match(/^##\s+/)) {
+            if (newLines[endOfSection].match(SECTION_HEADER_REGEX)) {
               break;
             }
             endOfSection++;
@@ -165,9 +181,7 @@ export function moveTaskToParent(
   position: 'top' | 'bottom' | 'after' = 'bottom',
   afterLine?: number
 ): string {
-  // Detect line ending style
-  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
+  const { lines, lineEnding } = parseContentLines(content);
   const taskIndex = taskLine - 1;
   const parentIndex = parentLine - 1;
 
@@ -178,7 +192,7 @@ export function moveTaskToParent(
   }
 
   // Extract task text (remove leading whitespace, bullet, and checkbox)
-  const taskMatch = taskContent.match(/^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.+)$/);
+  const taskMatch = taskContent.match(TASK_WITH_MD_CHECKBOX_REGEX);
   if (!taskMatch) {
     return content;
   }
@@ -190,12 +204,12 @@ export function moveTaskToParent(
   if (!parentContent) {
     return content;
   }
-  const parentIndent = parentContent.match(/^(\s*)/)?.[1].length ?? 0;
+  const parentIndent = parentContent.match(INDENT_REGEX)?.[1].length ?? 0;
   const childIndent = ' '.repeat(parentIndent + 2);
 
   // Find all children of the task being moved (to move them too)
   const taskLines: string[] = [];
-  const originalTaskIndent = taskContent.match(/^(\s*)/)?.[1].length ?? 0;
+  const originalTaskIndent = taskContent.match(INDENT_REGEX)?.[1].length ?? 0;
 
   // The task itself, re-indented as a child
   taskLines.push(`${childIndent}- ${checkboxPart} ${taskText}`);
@@ -204,7 +218,7 @@ export function moveTaskToParent(
   let i = taskIndex + 1;
   while (i < lines.length) {
     const currentLine = lines[i];
-    const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+    const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
 
     if (currentLine.trim() === '') {
       break;
@@ -240,7 +254,7 @@ export function moveTaskToParent(
   // Find insertion point - right after the parent or at end of parent's children
   let insertIndex: number;
   const adjustedParentContent = newLines[adjustedParentIndex];
-  const adjustedParentIndent = adjustedParentContent?.match(/^(\s*)/)?.[1].length ?? 0;
+  const adjustedParentIndent = adjustedParentContent?.match(INDENT_REGEX)?.[1].length ?? 0;
 
   if (position === 'top') {
     // Insert right after parent line
@@ -254,11 +268,11 @@ export function moveTaskToParent(
     const afterIndex = adjustedAfterLine - 1; // Convert to 0-indexed
     if (afterIndex >= 0 && afterIndex < newLines.length) {
       // Find end of the "after" task's children
-      const afterTaskIndent = newLines[afterIndex]?.match(/^(\s*)/)?.[1].length ?? 0;
+      const afterTaskIndent = newLines[afterIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
       insertIndex = afterIndex + 1;
       while (insertIndex < newLines.length) {
         const currentLine = newLines[insertIndex];
-        const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+        const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
         if (currentLine.trim() === '' || currentIndent <= afterTaskIndent) {
           break;
         }
@@ -273,7 +287,7 @@ export function moveTaskToParent(
     insertIndex = adjustedParentIndex + 1;
     while (insertIndex < newLines.length) {
       const currentLine = newLines[insertIndex];
-      const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+      const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
 
       if (currentLine.trim() === '') {
         break;
@@ -311,13 +325,12 @@ export function addTaskToSection(
   content: string,
   sectionTitle: string
 ): { content: string; line: number } {
-  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
+  const { lines, lineEnding } = parseContentLines(content);
 
   // Find the section header
   let sectionIndex = -1;
   for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/^##\s+(.+)$/);
+    const match = lines[i].match(SECTION_HEADER_REGEX);
     if (match && match[1].trim() === sectionTitle) {
       sectionIndex = i;
       break;
@@ -349,8 +362,7 @@ export function editTaskTextInContent(
   line: number,
   newText: string
 ): string {
-  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
+  const { lines, lineEnding } = parseContentLines(content);
   const lineIndex = line - 1;
 
   if (lineIndex < 0 || lineIndex >= lines.length) {
@@ -360,14 +372,14 @@ export function editTaskTextInContent(
   const currentLine = lines[lineIndex];
 
   // Match markdown checkbox: - [ ] text or - [x] text
-  const mdMatch = currentLine.match(/^(\s*[-*]\s+\[[ xX]\]\s+)(.+)$/);
+  const mdMatch = currentLine.match(TASK_TEXT_MD_CHECKBOX_REGEX);
   if (mdMatch) {
     lines[lineIndex] = mdMatch[1] + newText;
     return lines.join(lineEnding);
   }
 
   // Match unicode checkbox: - ☐ text or - ☑ text
-  const unicodeMatch = currentLine.match(/^(\s*[-*]\s+[☐☑✓✗]\s+)(.+)$/);
+  const unicodeMatch = currentLine.match(TASK_TEXT_UNICODE_CHECKBOX_REGEX);
   if (unicodeMatch) {
     lines[lineIndex] = unicodeMatch[1] + newText;
     return lines.join(lineEnding);
@@ -380,8 +392,7 @@ export function addSubtaskToParent(
   content: string,
   parentLine: number
 ): { content: string; line: number } {
-  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
+  const { lines, lineEnding } = parseContentLines(content);
   const parentIndex = parentLine - 1;
 
   if (parentIndex < 0 || parentIndex >= lines.length) {
@@ -389,14 +400,14 @@ export function addSubtaskToParent(
   }
 
   const parentContent = lines[parentIndex];
-  const parentIndent = parentContent.match(/^(\s*)/)?.[1].length ?? 0;
+  const parentIndent = parentContent.match(INDENT_REGEX)?.[1].length ?? 0;
   const childIndent = ' '.repeat(parentIndent + 2);
 
   // Find insertion point: after parent and all its existing children
   let insertIndex = parentIndex + 1;
   while (insertIndex < lines.length) {
     const currentLine = lines[insertIndex];
-    const currentIndent = currentLine.match(/^(\s*)/)?.[1].length ?? 0;
+    const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
 
     if (currentLine.trim() === '') {
       break;
@@ -421,8 +432,7 @@ export function removeCheckboxFromTask(
   content: string,
   line: number
 ): string {
-  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
+  const { lines, lineEnding } = parseContentLines(content);
   const lineIndex = line - 1;
 
   if (lineIndex < 0 || lineIndex >= lines.length) {
