@@ -1,11 +1,12 @@
 {
-  "name": "todo-sidebar",
-  "displayName": "Todo Sidebar",
+  "name": "todo-sidebar-md",
+  "displayName": "Todo Sidebar MD",
+  "description": "A Kanban-style todo board in the sidebar, parsed from Markdown",
   "repository": {
     "type": "git",
     "url": "https://github.com/ssebs/todo-sidebar.git"
   },
-  "description": "A Kanban-style todo board in the sidebar, parsed from Markdown",
+  "publisher": "SebastianSafari",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.85.0"
