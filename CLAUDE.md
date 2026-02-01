@@ -15,7 +15,9 @@ npm run package        # Production build
 
 ## Testing the Extension
 
-Press F5 in VSCode to launch the extension development host. Click the "Todo Board" icon in the activity bar, then run command "Todo Sidebar: Open Markdown File" to select a markdown file.
+Press F5 in VSCode to launch the extension development host (uses `.vscode/launch.json` configuration). Click the "Todo Board" icon in the activity bar, then run command "Todo Sidebar: Open Markdown File" to select a markdown file.
+
+Tests are located in `src/test/` and use the Mocha framework with `@vscode/test-cli`.
 
 ## Architecture
 
@@ -26,12 +28,17 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
 - **extension.ts** - Entry point. Registers the webview provider and commands (`todoSidebar.openFile`, `todoSidebar.refresh`).
 
 - **KanbanViewProvider.ts** - The main webview provider. Contains:
-  - Inline HTML/CSS/JS for the webview UI (no separate frontend files)
+  - Loads HTML/CSS/JS from `webview.html` template file
   - Message handlers for webview-to-extension communication (`toggle`, `move`, `moveToParent`, `getColumns`, `openAtLine`, `addTask`, `editTaskText`, `addSubtask`)
   - File watchers to auto-refresh when the markdown file changes (set up only once to avoid duplicates)
+  - Drag-and-drop supports precise positioning with 'top', 'bottom', and 'after' positions using `afterLine` parameter
+
+- **webview.html** - Webview UI template containing:
+  - HTML structure and CSS styles for the Kanban board interface
+  - JavaScript for rendering and user interactions
   - Uses SortableJS (loaded from CDN: `cdn.jsdelivr.net`) for drag-and-drop with `group: 'shared'` allowing tasks to move between columns and in/out of parent tasks
   - CSP configured to allow scripts from jsdelivr CDN
-  - Drag-and-drop supports precise positioning with 'top', 'bottom', and 'after' positions using `afterLine` parameter
+  - Template placeholders `{{cspSource}}` and `{{nonce}}` are replaced at runtime by KanbanViewProvider
 
 - **parser.ts** - Parses markdown into a `Board` structure. Handles:
   - `# Title` for board title
@@ -48,6 +55,7 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
   - `addTaskToSection()` - Add a new task to a section
   - `editTaskTextInContent()` - Edit task text in place
   - `addSubtaskToParent()` - Add a subtask under a parent task
+  - All functions preserve line ending style (CRLF vs LF) from the original file
 
 ### Data Flow
 
