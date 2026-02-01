@@ -4,6 +4,11 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 > Sorry, this is a vibe-coded app. I just wanted the feature 🤷‍♀️
 
+## Install
+
+- [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=SebastianSafari.todo-sidebar-md)
+- [Open-VSX Marketplace](https://open-vsx.org/extension/SebastianSafari/todo-sidebar-md)
+
 ## Features
 
 - **Markdown-powered** - Your todos live in plain `.md` files, not a proprietary format
@@ -72,6 +77,21 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - [x] Another thing
   - [x] Sub other thing
 ```
+
+## Building
+
+## Local
+- `npm install`
+- `npm watch`
+  - Then, hit F5 to debug.
+
+### Publishing
+- Confirm everything is working & compiles
+- Update version in [package.json](./package.json) (e.g. "0.0.3")
+- `vsce package`
+- `git add -A; git commit -m 'v0.0.3 release'; git push; git tag v0.0.3; git push origin v0.0.3`
+- [Github Actions](./.github/workflows/main.yml) are configured to build & publish when a new tag is created, so on sucess it will auto publish
+  - These use auth token repo secrets to push to both extension galleries.
 
 ## LICENSE
 
