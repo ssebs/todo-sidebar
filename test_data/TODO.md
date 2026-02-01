@@ -2,23 +2,6 @@
 
 > This is a list of tasks
 
-## This is a separate section.
-> it should be regular markdown
-
-### h3
-- item
-- item 2
-  - sub item
-
----
-
-dashes
-
-```py
-
-print("test")
-```
-
 
 ## In Progress 🚀
 
@@ -52,3 +35,22 @@ print("test")
 - [x] Sub thing
 - [x] A second thing
 - [x] Create this example MD
+
+---
+
+## This is a separate section.
+> it should be regular markdown, and not be updated.
+
+### h3
+- item
+- item 2
+  - sub item
+
+---
+
+dashes
+
+```py
+
+print("test")
+```
