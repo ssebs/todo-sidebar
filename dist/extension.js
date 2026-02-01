@@ -227,42 +227,49 @@ class KanbanViewProvider {
     }
     async setActiveFile(uri) {
         this._activeFileUri = uri;
-        // Store in workspace settings for reliable persistence
+        // Store in workspace settings by directly writing to .vscode/settings.json
         try {
-            const config = vscode.workspace.getConfiguration('todoSidebar');
             const hasWorkspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
-            console.log('Workspace info:', {
-                hasWorkspaceFolder,
-                workspaceFile: vscode.workspace.workspaceFile?.toString(),
-                workspaceFolders: vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath)
-            });
             if (!hasWorkspaceFolder) {
                 console.error('No workspace folder open - cannot save to workspace settings');
                 vscode.window.showWarningMessage('Please open a folder/workspace to persist the todo file selection');
                 await this._refresh();
                 return;
             }
-            // Use WorkspaceFolder target to write to .vscode/settings.json
-            await config.update('activeFile', uri.fsPath, vscode.ConfigurationTarget.WorkspaceFolder);
-            console.log('Saved activeFile to workspace settings:', uri.fsPath);
-            // Verify it was saved
-            const verifyConfig = vscode.workspace.getConfiguration('todoSidebar');
-            const savedValue = verifyConfig.get('activeFile');
-            console.log('Verification - value in config:', savedValue);
-            // Check if .vscode/settings.json exists
-            if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0]) {
-                const settingsPath = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.vscode', 'settings.json');
-                try {
-                    const settingsContent = await vscode.workspace.fs.readFile(settingsPath);
-                    console.log('Settings file content:', Buffer.from(settingsContent).toString('utf-8'));
-                }
-                catch (e) {
-                    console.log('Settings file does not exist or cannot be read:', settingsPath.fsPath);
-                }
+            const workspaceFolder = vscode.workspace.workspaceFolders[0];
+            const vscodeDir = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode');
+            const settingsPath = vscode.Uri.joinPath(vscodeDir, 'settings.json');
+            // Ensure .vscode directory exists
+            try {
+                await vscode.workspace.fs.stat(vscodeDir);
             }
+            catch {
+                await vscode.workspace.fs.createDirectory(vscodeDir);
+                console.log('Created .vscode directory');
+            }
+            // Read existing settings or create new object
+            let settings = {};
+            let existingText = '';
+            try {
+                const content = await vscode.workspace.fs.readFile(settingsPath);
+                existingText = Buffer.from(content).toString('utf-8');
+                // Try to parse, stripping comments if needed
+                const stripped = existingText.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+                settings = JSON.parse(stripped);
+            }
+            catch (e) {
+                console.log('Creating new settings.json file (or couldn\'t parse existing)');
+            }
+            // Update the todoSidebar.activeFile setting
+            settings['todoSidebar.activeFile'] = uri.fsPath;
+            // Write back to settings.json with proper formatting
+            const settingsText = JSON.stringify(settings, null, 4);
+            await vscode.workspace.fs.writeFile(settingsPath, Buffer.from(settingsText, 'utf-8'));
+            console.log('Saved activeFile to .vscode/settings.json:', uri.fsPath);
         }
         catch (e) {
             console.error('Failed to save activeFile to settings:', e);
+            vscode.window.showErrorMessage(`Failed to save todo file selection: ${e}`);
         }
         await this._refresh();
     }

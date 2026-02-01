@@ -68,7 +68,7 @@ interface Board { title: string; description: string; columns: Column[]; }
 
 ### State Persistence
 
-The selected markdown file path is persisted via `context.workspaceState` under the key `todoSidebar.activeFile` (stored as `fsPath`), allowing the extension to restore the board on reload or when the panel is hidden/shown.
+The selected markdown file path is persisted to `.vscode/settings.json` via the workspace configuration setting `todoSidebar.activeFile`. The file path is saved when a user selects a markdown file via the "Todo Sidebar: Open Markdown File" command, and is automatically restored when the extension loads or the panel becomes visible.
 
 ### UI Features
 

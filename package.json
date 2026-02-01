@@ -52,7 +52,7 @@
           "type": "string",
           "default": "",
           "description": "Path to the currently active markdown file for the todo board",
-          "scope": "window"
+          "scope": "resource"
         }
       }
     }
