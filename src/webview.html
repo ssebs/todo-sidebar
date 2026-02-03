@@ -587,6 +587,24 @@
         showColumnPicker(message.columns, message.taskLine);
       }
     });
+
+    // Keyboard shortcuts for undo/redo
+    document.addEventListener('keydown', (e) => {
+      // Skip if user is editing a task
+      if (document.activeElement && document.activeElement.classList.contains('task-edit-input')) {
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          vscode.postMessage({ type: 'undo' });
+        } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          vscode.postMessage({ type: 'redo' });
+        }
+      }
+    });
   </script>
 </body>
 </html>

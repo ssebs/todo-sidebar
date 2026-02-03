@@ -13,6 +13,12 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   private _disposables: vscode.Disposable[] = [];
   private _pendingEditLine?: number;
 
+  // History stack for undo/redo
+  private _historyStack: string[] = [];
+  private _historyIndex: number = -1;
+  private _maxHistorySize: number = 50;
+  private _isUndoRedo: boolean = false;
+
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
   public resolveWebviewView(
@@ -69,6 +75,12 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           break;
         case 'addSubtask':
           await this._handleAddSubtask(message.parentLine);
+          break;
+        case 'undo':
+          await this._handleUndo();
+          break;
+        case 'redo':
+          await this._handleRedo();
           break;
       }
     });
@@ -180,6 +192,10 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   public async setActiveFile(uri: vscode.Uri) {
     this._activeFileUri = uri;
 
+    // Clear history when switching files
+    this._historyStack = [];
+    this._historyIndex = -1;
+
     // Store in workspace settings by directly writing to .vscode/settings.json
     try {
       const hasWorkspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
@@ -277,7 +293,58 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     if (!this._activeFileUri) {
       return;
     }
+
+    // Track history for undo/redo (skip if this is an undo/redo operation)
+    if (!this._isUndoRedo) {
+      // If we're not at the end of the stack, truncate forward history
+      if (this._historyIndex < this._historyStack.length - 1) {
+        this._historyStack = this._historyStack.slice(0, this._historyIndex + 1);
+      }
+
+      // Add current state to history
+      this._historyStack.push(text);
+
+      // Limit history size
+      if (this._historyStack.length > this._maxHistorySize) {
+        this._historyStack.shift();
+      } else {
+        this._historyIndex++;
+      }
+    }
+
     await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+  }
+
+  private async _handleUndo() {
+    if (this._historyIndex <= 0 || !this._activeFileUri) {
+      return;
+    }
+
+    this._historyIndex--;
+    const previousContent = this._historyStack[this._historyIndex];
+
+    this._isUndoRedo = true;
+    try {
+      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(previousContent, 'utf-8'));
+    } finally {
+      this._isUndoRedo = false;
+    }
+  }
+
+  private async _handleRedo() {
+    if (this._historyIndex >= this._historyStack.length - 1 || !this._activeFileUri) {
+      return;
+    }
+
+    this._historyIndex++;
+    const nextContent = this._historyStack[this._historyIndex];
+
+    this._isUndoRedo = true;
+    try {
+      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(nextContent, 'utf-8'));
+    } finally {
+      this._isUndoRedo = false;
+    }
   }
 
   private async _refresh() {
@@ -287,6 +354,13 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
     try {
       const text = await this._readActiveFile();
+
+      // Initialize history with first state if empty
+      if (this._historyStack.length === 0) {
+        this._historyStack.push(text);
+        this._historyIndex = 0;
+      }
+
       this._board = parseMarkdown(text);
       const editLine = this._pendingEditLine;
       this._pendingEditLine = undefined;

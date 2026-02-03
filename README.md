@@ -21,6 +21,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - **Checkbox support** - Works with `- [ ]`/`- [x]` and unicode `☐`/`☑` checkboxes
 - **Auto-move to Done** - Checking a task automatically moves it to your Done column
 - **Keep the rest of your MD file untouched** - Only tasks you drag / interact with will move, other markdown will stay.
+- **History support** (ctrl+z, ctrl+y)
 
 ## Usage
 
@@ -46,7 +47,9 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
-- History support (ctrl+z, ctrl+y)
+
+- After being open for a long time, checking the box does not move it to Done
+- Right click => move to section (like how unchecking done works)
 - option to hide h2 sections & save the name to the settings json as an array
 - When you open the extension without any file saved, pick a file automatically
 - add delete task button, delete that whole line
