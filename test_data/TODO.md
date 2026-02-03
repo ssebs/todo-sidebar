@@ -4,10 +4,7 @@
 
 ## In Progress 🚀
 
-- [ ] Create the extension
-  - [x] vibe code it
-  - [x] make it work
-  - [ ] cleanup the code
+- [ ] New task
 
 ## Backlog 📋
 
@@ -19,6 +16,11 @@
 - [ ] Rewrite in rust
 
 ## Done ✅
+
+- [x] Create the extension
+  - [x] vibe code it
+  - [x] make it work
+  - [x] cleanup the code
 
 - [x] asdas
 
