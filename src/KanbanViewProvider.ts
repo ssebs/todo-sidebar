@@ -371,24 +371,27 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async _handleToggle(line: number, checked: boolean, targetColumn?: string) {
-    if (!this._activeFileUri || !this._board) {
+    if (!this._activeFileUri) {
       return;
     }
 
     try {
       let text = await this._readActiveFile();
 
+      // Re-parse the board from fresh content to get accurate line numbers
+      const currentBoard = parseMarkdown(text);
+
       // Toggle the checkbox
       text = toggleTaskInContent(text, line, checked);
 
       // Only move top-level tasks to Done column (not subtasks)
-      const isTopLevel = this._isTopLevelTask(line);
+      const isTopLevel = this._isTopLevelTaskInBoard(line, currentBoard);
 
       if (checked && isTopLevel) {
         // If checked and top-level, move to Done column at TOP
-        const doneColumn = this._board.columns.find((c) => c.isDoneColumn);
+        const doneColumn = currentBoard.columns.find((c) => c.isDoneColumn);
         if (doneColumn) {
-          const currentColumn = this._findTaskColumn(line);
+          const currentColumn = this._findTaskColumnInBoard(line, currentBoard);
           if (currentColumn && !currentColumn.isDoneColumn) {
             text = moveTaskInContent(text, line, doneColumn.title, 'top');
           }
@@ -404,12 +407,8 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private _isTopLevelTask(line: number): boolean {
-    if (!this._board) {
-      return false;
-    }
-
-    for (const column of this._board.columns) {
+  private _isTopLevelTaskInBoard(line: number, board: Board): boolean {
+    for (const column of board.columns) {
       for (const task of column.tasks) {
         if (task.line === line) {
           return true;
@@ -419,11 +418,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     return false;
   }
 
-  private _findTaskColumn(line: number): Column | undefined {
-    if (!this._board) {
-      return undefined;
-    }
-
+  private _findTaskColumnInBoard(line: number, board: Board): Column | undefined {
     const findInTasks = (tasks: Task[]): boolean => {
       for (const task of tasks) {
         if (task.line === line) {
@@ -436,7 +431,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       return false;
     };
 
-    for (const column of this._board.columns) {
+    for (const column of board.columns) {
       if (findInTasks(column.tasks)) {
         return column;
       }

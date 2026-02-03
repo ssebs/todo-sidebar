@@ -455,20 +455,22 @@ class KanbanViewProvider {
         }
     }
     async _handleToggle(line, checked, targetColumn) {
-        if (!this._activeFileUri || !this._board) {
+        if (!this._activeFileUri) {
             return;
         }
         try {
             let text = await this._readActiveFile();
+            // Re-parse the board from fresh content to get accurate line numbers
+            const currentBoard = (0, parser_1.parseMarkdown)(text);
             // Toggle the checkbox
             text = (0, serializer_1.toggleTaskInContent)(text, line, checked);
             // Only move top-level tasks to Done column (not subtasks)
-            const isTopLevel = this._isTopLevelTask(line);
+            const isTopLevel = this._isTopLevelTaskInBoard(line, currentBoard);
             if (checked && isTopLevel) {
                 // If checked and top-level, move to Done column at TOP
-                const doneColumn = this._board.columns.find((c) => c.isDoneColumn);
+                const doneColumn = currentBoard.columns.find((c) => c.isDoneColumn);
                 if (doneColumn) {
-                    const currentColumn = this._findTaskColumn(line);
+                    const currentColumn = this._findTaskColumnInBoard(line, currentBoard);
                     if (currentColumn && !currentColumn.isDoneColumn) {
                         text = (0, serializer_1.moveTaskInContent)(text, line, doneColumn.title, 'top');
                     }
@@ -484,11 +486,8 @@ class KanbanViewProvider {
             console.error('Error toggling task:', error);
         }
     }
-    _isTopLevelTask(line) {
-        if (!this._board) {
-            return false;
-        }
-        for (const column of this._board.columns) {
+    _isTopLevelTaskInBoard(line, board) {
+        for (const column of board.columns) {
             for (const task of column.tasks) {
                 if (task.line === line) {
                     return true;
@@ -497,10 +496,7 @@ class KanbanViewProvider {
         }
         return false;
     }
-    _findTaskColumn(line) {
-        if (!this._board) {
-            return undefined;
-        }
+    _findTaskColumnInBoard(line, board) {
         const findInTasks = (tasks) => {
             for (const task of tasks) {
                 if (task.line === line) {
@@ -512,7 +508,7 @@ class KanbanViewProvider {
             }
             return false;
         };
-        for (const column of this._board.columns) {
+        for (const column of board.columns) {
             if (findInTasks(column.tasks)) {
                 return column;
             }

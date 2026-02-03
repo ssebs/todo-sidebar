@@ -47,8 +47,8 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
-
-- After being open for a long time, checking the box does not move it to Done
+- Render descriptions on sections
+- Cleanup file parsing code - its regex hell
 - Right click => move to section (like how unchecking done works)
 - option to hide h2 sections & save the name to the settings json as an array
 - When you open the extension without any file saved, pick a file automatically

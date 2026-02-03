@@ -2,7 +2,6 @@
 
 > This is a list of tasks
 
-
 ## In Progress 🚀
 
 - [ ] Test item 3
