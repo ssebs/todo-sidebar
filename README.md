@@ -22,10 +22,10 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - **Auto-move to Done** - Checking a task automatically moves it to your Done column
 - **Keep the rest of your MD file untouched** - Only tasks you drag / interact with will move, other markdown will stay.
 
-
 ## Usage
 
 ### Initial Setup
+
 - Create H2 sections in your MD file
   - **IMPORTANT:** Make sure to create a "Done" section
   - Just include the word "done", and only have 1
@@ -35,6 +35,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
   - Drag the Todo Sidebar icon from the left bar to the right (see gif)
 
 ### Using it
+
 - Click the + to add a task, or the arrow to open in the editor
 - Drag tasks between columns, check/uncheck to toggle status
 - Check the boxes to mark tasks as done
@@ -45,6 +46,8 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 ## TODO
 
+- Local path support: "todoSidebar.activeFile": "./README.md"
+- History support (ctrl+z, ctrl+y)
 - option to hide h2 sections & save the name to the settings json as an array
 - When you open the extension without any file saved, pick a file automatically
 - add delete task button, delete that whole line
@@ -81,11 +84,13 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ## Building
 
 ## Local
+
 - `npm install`
 - `npm watch`
   - Then, hit F5 to debug.
 
 ### Publishing
+
 - Confirm everything is working & compiles
 - Update version in [package.json](./package.json) (e.g. "0.0.3")
 - `vsce package`
