@@ -47,7 +47,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
-- Render descriptions on sections
+
 - Cleanup file parsing code - its regex hell
 - Right click => move to section (like how unchecking done works)
 - option to hide h2 sections & save the name to the settings json as an array
@@ -70,6 +70,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
   - [ ] Subtask 2
 
 ## Backlog
+> This is a sub-description
 
 - [ ] Task 3
   - [ ] Subtask 1

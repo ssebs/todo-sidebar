@@ -42,8 +42,9 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
 
 - **parser.ts** - Parses markdown into a `Board` structure. Handles:
   - `# Title` for board title
-  - `> Quote` for description
+  - `> Quote` for board description (before first column)
   - `## Section` for columns (columns with "done" in title are marked `isDoneColumn`)
+  - `> Quote` after `## Section` for column description (before any tasks)
   - `- [ ]` / `- [x]` for tasks with markdown checkboxes
   - `- ☐` / `- ☑` for unicode checkboxes
   - Indentation-based parent/child task hierarchy (recursive, supports deep nesting)
@@ -70,7 +71,7 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
 
 ```typescript
 interface Task { text: string; checked: boolean; line: number; children: Task[]; hasCheckbox: boolean; }
-interface Column { title: string; line: number; isDoneColumn: boolean; tasks: Task[]; }
+interface Column { title: string; description: string; line: number; isDoneColumn: boolean; tasks: Task[]; }
 interface Board { title: string; description: string; columns: Column[]; }
 ```
 
@@ -96,11 +97,15 @@ The selected markdown file path is persisted to `.vscode/settings.json` via the 
 
 ## In Progress
 
+> Tasks currently being worked on
+
 - [ ] Task 1
   - [ ] Subtask
 - [x] Completed task
 
 ## Done
+
+> Completed tasks
 
 - [x] Finished item
 ```

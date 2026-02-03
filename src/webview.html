@@ -48,9 +48,16 @@
       justify-content: space-between;
       align-items: center;
       font-weight: bold;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       padding-bottom: 4px;
       border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .column-description {
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+      margin: 0 0 8px 0;
+      font-weight: normal;
+      white-space: pre-wrap;
     }
     .add-task-btn {
       background: none;
@@ -298,12 +305,14 @@
 
     function renderColumn(column) {
       const tasks = column.tasks.map(task => renderTask(task, column.isDoneColumn)).join('');
+      const descriptionHtml = column.description ? `<p class="column-description">${escapeHtml(column.description)}</p>` : '';
       return `
         <div class="column" data-section="${escapeHtml(column.title)}" data-is-done="${column.isDoneColumn}">
           <div class="column-header">
             <span class="column-title">${escapeHtml(column.title)}</span>
             <button class="add-task-btn" data-section="${escapeHtml(column.title)}" title="Add task">+</button>
           </div>
+          ${descriptionHtml}
           <div class="tasks" data-section="${escapeHtml(column.title)}">${tasks}</div>
         </div>
       `;

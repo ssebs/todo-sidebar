@@ -697,6 +697,7 @@ function parseMarkdown(content) {
             const title = columnMatch[1].trim();
             currentColumn = {
                 title,
+                description: '',
                 line: lineNumber,
                 isDoneColumn: title.toLowerCase().includes('done'),
                 tasks: []
@@ -704,6 +705,19 @@ function parseMarkdown(content) {
             board.columns.push(currentColumn);
             taskStack = [];
             continue;
+        }
+        // Column description: > text (after column header, before any tasks)
+        if (currentColumn && currentColumn.tasks.length === 0) {
+            const descMatch = line.match(DESCRIPTION_REGEX);
+            if (descMatch) {
+                if (currentColumn.description) {
+                    currentColumn.description += '\n' + descMatch[1];
+                }
+                else {
+                    currentColumn.description = descMatch[1];
+                }
+                continue;
+            }
         }
         // Task with markdown checkbox: - [ ] or - [x] or * [ ] or * [x]
         const taskMatch = line.match(MD_TASK_REGEX);

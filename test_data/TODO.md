@@ -12,6 +12,7 @@
   - [ ] cleanup the code
 
 ## Backlog 📋
+> This is a sub-description
 
 - [ ] something else
   - [ ] New task

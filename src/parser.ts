@@ -8,6 +8,7 @@ export interface Task {
 
 export interface Column {
   title: string;
+  description: string;
   line: number;
   isDoneColumn: boolean;
   tasks: Task[];
@@ -74,6 +75,7 @@ export function parseMarkdown(content: string): Board {
       const title = columnMatch[1].trim();
       currentColumn = {
         title,
+        description: '',
         line: lineNumber,
         isDoneColumn: title.toLowerCase().includes('done'),
         tasks: []
@@ -81,6 +83,19 @@ export function parseMarkdown(content: string): Board {
       board.columns.push(currentColumn);
       taskStack = [];
       continue;
+    }
+
+    // Column description: > text (after column header, before any tasks)
+    if (currentColumn && currentColumn.tasks.length === 0) {
+      const descMatch = line.match(DESCRIPTION_REGEX);
+      if (descMatch) {
+        if (currentColumn.description) {
+          currentColumn.description += '\n' + descMatch[1];
+        } else {
+          currentColumn.description = descMatch[1];
+        }
+        continue;
+      }
     }
 
     // Task with markdown checkbox: - [ ] or - [x] or * [ ] or * [x]
