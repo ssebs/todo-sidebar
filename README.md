@@ -47,12 +47,14 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
-
-- Cleanup file parsing code - its regex hell
-- Right click => move to section (like how unchecking done works)
+- Cleanup main file - split into:
+  - filesystem
+  - parser + file parsing code is regex hell
+  - handlers
+  - existing provider lifecycle
 - option to hide h2 sections & save the name to the settings json as an array
 - When you open the extension without any file saved, pick a file automatically
-- add delete task button, delete that whole line
+- add delete task button when right clicking task
 - don't shrink text on grandchild tasks, keep at same size as child tasks
 
 ## Markdown Format

@@ -254,6 +254,50 @@
     .column-picker-cancel:hover {
       background: var(--vscode-list-hoverBackground);
     }
+    /* Context menu for move to section */
+    .context-menu {
+      position: fixed;
+      background: var(--vscode-menu-background, var(--vscode-editor-background));
+      border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+      border-radius: 4px;
+      padding: 4px 0;
+      min-width: 150px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+    }
+    .context-menu-item {
+      display: block;
+      width: 100%;
+      padding: 6px 12px;
+      background: none;
+      border: none;
+      color: var(--vscode-menu-foreground, var(--vscode-foreground));
+      cursor: pointer;
+      text-align: left;
+      font-size: inherit;
+    }
+    .context-menu-item:hover {
+      background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
+      color: var(--vscode-menu-selectionForeground, var(--vscode-foreground));
+    }
+    .context-menu-item.disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .context-menu-item.disabled:hover {
+      background: none;
+    }
+    .context-menu-separator {
+      height: 1px;
+      background: var(--vscode-menu-separatorBackground, var(--vscode-panel-border));
+      margin: 4px 0;
+    }
+    .context-menu-header {
+      padding: 4px 12px;
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+      cursor: default;
+    }
   </style>
 </head>
 <body>
@@ -374,6 +418,84 @@
       });
 
       document.body.appendChild(overlay);
+    }
+
+    function showContextMenu(e, taskLine, currentSection) {
+      // Remove any existing context menu
+      const existingMenu = document.querySelector('.context-menu');
+      if (existingMenu) existingMenu.remove();
+
+      if (!board || !board.columns) return;
+
+      const menu = document.createElement('div');
+      menu.className = 'context-menu';
+
+      // Add header
+      const header = document.createElement('div');
+      header.className = 'context-menu-header';
+      header.textContent = 'Move to section';
+      menu.appendChild(header);
+
+      // Add separator
+      const separator = document.createElement('div');
+      separator.className = 'context-menu-separator';
+      menu.appendChild(separator);
+
+      // Add column options
+      board.columns.forEach(column => {
+        const item = document.createElement('button');
+        item.className = 'context-menu-item';
+        item.textContent = column.title;
+        item.dataset.column = column.title;
+
+        // Disable current section
+        if (column.title === currentSection) {
+          item.classList.add('disabled');
+          item.textContent += ' (current)';
+        }
+
+        menu.appendChild(item);
+      });
+
+      // Position the menu at cursor
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+
+      document.body.appendChild(menu);
+
+      // Adjust position if menu goes off screen
+      const rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        menu.style.left = (window.innerWidth - rect.width - 5) + 'px';
+      }
+      if (rect.bottom > window.innerHeight) {
+        menu.style.top = (window.innerHeight - rect.height - 5) + 'px';
+      }
+
+      // Handle menu item clicks
+      menu.addEventListener('click', (evt) => {
+        const item = evt.target.closest('.context-menu-item');
+        if (item && !item.classList.contains('disabled')) {
+          const targetColumn = item.dataset.column;
+          vscode.postMessage({ type: 'move', taskLine, targetSection: targetColumn, position: 'top' });
+          menu.remove();
+        }
+      });
+
+      // Close menu when clicking outside
+      function closeMenu(evt) {
+        if (!menu.contains(evt.target)) {
+          menu.remove();
+          document.removeEventListener('click', closeMenu);
+          document.removeEventListener('contextmenu', closeMenu);
+        }
+      }
+
+      // Delay adding the listener to avoid immediate close
+      setTimeout(() => {
+        document.addEventListener('click', closeMenu);
+        document.addEventListener('contextmenu', closeMenu);
+      }, 0);
     }
 
     function enterEditMode(taskElement) {
@@ -497,6 +619,25 @@
           }
           e.stopPropagation();
           enterEditMode(taskElement);
+        });
+      });
+
+      // Right-click context menu to move to section
+      document.querySelectorAll('.task, .child-task').forEach(taskElement => {
+        taskElement.addEventListener('contextmenu', (e) => {
+          // Don't trigger if clicking on buttons or checkbox
+          if (e.target.closest('button, input')) {
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+
+          const taskLine = parseInt(taskElement.dataset.line);
+          // Find the current section by walking up to the column
+          const column = taskElement.closest('.column');
+          const currentSection = column ? column.dataset.section : null;
+
+          showContextMenu(e, taskLine, currentSection);
         });
       });
 
