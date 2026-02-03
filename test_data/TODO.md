@@ -15,6 +15,7 @@
 
 - [ ] something else
   - [ ] New task
+    - [ ] New task
 - [ ] Rewrite in rust
 
 ## Done ✅

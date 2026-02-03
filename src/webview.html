@@ -146,6 +146,9 @@
       font-size: 0.9em;
       color: var(--vscode-descriptionForeground);
     }
+    .children .children {
+      font-size: inherit;
+    }
     .child-task {
       background: var(--vscode-input-background);
       border: 1px solid var(--vscode-input-border);
@@ -154,6 +157,9 @@
       margin: 4px 0;
       cursor: grab;
       font-size: 0.9em;
+    }
+    .child-task .child-task {
+      font-size: inherit;
     }
     .child-task .task-header {
       display: flex;
