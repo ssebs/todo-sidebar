@@ -84,8 +84,18 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     console.log('Attempting to restore activeFile from settings:', savedPath);
     if (savedPath) {
       try {
-        this._activeFileUri = vscode.Uri.file(savedPath);
-        console.log('Restored activeFile:', this._activeFileUri.fsPath);
+        // Support relative paths (e.g., "./README.md" or "docs/todo.md")
+        if (savedPath.startsWith('./') || savedPath.startsWith('../') || !path.isAbsolute(savedPath)) {
+          const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+          if (workspaceFolder) {
+            this._activeFileUri = vscode.Uri.joinPath(workspaceFolder.uri, savedPath);
+          }
+        } else {
+          this._activeFileUri = vscode.Uri.file(savedPath);
+        }
+        if (this._activeFileUri) {
+          console.log('Restored activeFile:', this._activeFileUri.fsPath);
+        }
       } catch (e) {
         console.error('Failed to restore saved file:', e);
       }
@@ -117,6 +127,54 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       })
     );
     this._disposables.push(watcher);
+
+    // Watch for settings.json changes to pick up manual edits to activeFile
+    const settingsWatcher = vscode.workspace.createFileSystemWatcher('**/.vscode/settings.json');
+    this._disposables.push(
+      settingsWatcher.onDidChange(() => {
+        this._reloadActiveFileFromConfig();
+      })
+    );
+    this._disposables.push(settingsWatcher);
+
+    // Also watch for configuration changes (covers both file edits and UI changes)
+    this._disposables.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('todoSidebar.activeFile')) {
+          this._reloadActiveFileFromConfig();
+        }
+      })
+    );
+  }
+
+  private _reloadActiveFileFromConfig() {
+    const config = vscode.workspace.getConfiguration('todoSidebar');
+    const savedPath = config.get<string>('activeFile');
+    console.log('Config changed, reloading activeFile:', savedPath);
+
+    if (savedPath) {
+      try {
+        // Support relative paths (e.g., "./README.md" or "docs/todo.md")
+        if (savedPath.startsWith('./') || savedPath.startsWith('../') || !path.isAbsolute(savedPath)) {
+          const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+          if (workspaceFolder) {
+            this._activeFileUri = vscode.Uri.joinPath(workspaceFolder.uri, savedPath);
+          }
+        } else {
+          this._activeFileUri = vscode.Uri.file(savedPath);
+        }
+        if (this._activeFileUri) {
+          console.log('Reloaded activeFile:', this._activeFileUri.fsPath);
+          this._refresh();
+        }
+      } catch (e) {
+        console.error('Failed to reload saved file:', e);
+      }
+    } else {
+      this._activeFileUri = undefined;
+      this._board = undefined;
+      this._view?.webview.postMessage({ type: 'update', board: null });
+    }
   }
 
   public async setActiveFile(uri: vscode.Uri) {
@@ -145,25 +203,55 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         console.log('Created .vscode directory');
       }
 
-      // Read existing settings or create new object
-      let settings: any = {};
+      // Read existing settings content
       let existingText = '';
+      let fileExists = false;
       try {
         const content = await vscode.workspace.fs.readFile(settingsPath);
         existingText = Buffer.from(content).toString('utf-8');
-        // Try to parse, stripping comments if needed
-        const stripped = existingText.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-        settings = JSON.parse(stripped);
+        fileExists = true;
       } catch (e) {
-        console.log('Creating new settings.json file (or couldn\'t parse existing)');
+        // File doesn't exist
       }
 
-      // Update the todoSidebar.activeFile setting
-      settings['todoSidebar.activeFile'] = uri.fsPath;
+      // Convert to relative path if within workspace
+      let savePath = uri.fsPath;
+      if (workspaceFolder) {
+        const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
+        // Use relative path if it doesn't start with ".." (i.e., file is within workspace)
+        if (!relativePath.startsWith('..')) {
+          savePath = './' + relativePath.replace(/\\/g, '/');
+        }
+      }
 
-      // Write back to settings.json with proper formatting
-      const settingsText = JSON.stringify(settings, null, 4);
-      await vscode.workspace.fs.writeFile(settingsPath, Buffer.from(settingsText, 'utf-8'));
+      // Update or insert the setting while preserving existing content
+      const escapedPath = JSON.stringify(savePath);
+      const settingPattern = /"todoSidebar\.activeFile"\s*:\s*"[^"]*"/;
+      let newText: string;
+
+      if (!fileExists || existingText.trim() === '') {
+        // Create new settings file
+        newText = `{\n    "todoSidebar.activeFile": ${escapedPath}\n}`;
+      } else if (settingPattern.test(existingText)) {
+        // Update existing setting in place
+        newText = existingText.replace(settingPattern, `"todoSidebar.activeFile": ${escapedPath}`);
+      } else {
+        // Insert new setting after opening brace, preserving rest of file
+        const insertMatch = existingText.match(/^\s*\{/);
+        if (insertMatch) {
+          const insertPos = insertMatch[0].length;
+          const before = existingText.slice(0, insertPos);
+          const after = existingText.slice(insertPos);
+          const needsComma = after.trim().length > 0 && after.trim() !== '}';
+          const newSetting = `\n    "todoSidebar.activeFile": ${escapedPath}${needsComma ? ',' : ''}`;
+          newText = before + newSetting + after;
+        } else {
+          // Fallback: file is malformed, create new
+          newText = `{\n    "todoSidebar.activeFile": ${escapedPath}\n}`;
+        }
+      }
+
+      await vscode.workspace.fs.writeFile(settingsPath, Buffer.from(newText, 'utf-8'));
       console.log('Saved activeFile to .vscode/settings.json:', uri.fsPath);
 
     } catch (e) {

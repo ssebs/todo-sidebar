@@ -31,6 +31,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
   - Just include the word "done", and only have 1
 - Run VSCode command: **Todo Sidebar: Open Markdown File**
   - Select your markdown file
+  - Note: you can also use a relative path to the workspace. (e.g. `./TODO.md`)
 - Toggle VSCode Secondary Sidebar (CTRL + ALT + B) (or CMD + ALT + B on Mac)
   - Drag the Todo Sidebar icon from the left bar to the right (see gif)
 
@@ -45,8 +46,6 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
-- !Don't delete all other content in settings.json!
-- Local path support: "todoSidebar.activeFile": "./README.md"
 - History support (ctrl+z, ctrl+y)
 - option to hide h2 sections & save the name to the settings json as an array
 - When you open the extension without any file saved, pick a file automatically

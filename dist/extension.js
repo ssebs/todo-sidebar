@@ -1,1 +1,1177 @@
-(()=>{"use strict";var e={265(e,t,i){var n,s=this&&this.__createBinding||(Object.create?function(e,t,i,n){void 0===n&&(n=i);var s=Object.getOwnPropertyDescriptor(t,i);s&&!("get"in s?!t.__esModule:s.writable||s.configurable)||(s={enumerable:!0,get:function(){return t[i]}}),Object.defineProperty(e,n,s)}:function(e,t,i,n){void 0===n&&(n=i),e[n]=t[i]}),o=this&&this.__setModuleDefault||(Object.create?function(e,t){Object.defineProperty(e,"default",{enumerable:!0,value:t})}:function(e,t){e.default=t}),r=this&&this.__importStar||(n=function(e){return n=Object.getOwnPropertyNames||function(e){var t=[];for(var i in e)Object.prototype.hasOwnProperty.call(e,i)&&(t[t.length]=i);return t},n(e)},function(e){if(e&&e.__esModule)return e;var t={};if(null!=e)for(var i=n(e),r=0;r<i.length;r++)"default"!==i[r]&&s(t,e,i[r]);return o(t,e),t});Object.defineProperty(t,"__esModule",{value:!0}),t.activate=function(e){console.log("Todo Sidebar extension is now active!"),l=new c.KanbanViewProvider(e),e.subscriptions.push(a.window.registerWebviewViewProvider(c.KanbanViewProvider.viewType,l));const t=a.commands.registerCommand("todoSidebar.openFile",async()=>{const e=await a.window.showOpenDialog({canSelectFiles:!0,canSelectFolders:!1,canSelectMany:!1,filters:{Markdown:["md"]},title:"Select a Markdown file for the Todo Board"});e&&e[0]&&(await l.setActiveFile(e[0]),a.window.showInformationMessage(`Loaded: ${e[0].fsPath}`))}),i=a.commands.registerCommand("todoSidebar.refresh",async()=>{await l.refresh()});e.subscriptions.push(t,i)},t.deactivate=function(){l&&l.dispose()};const a=r(i(398)),c=i(913);let l},337(e,t){Object.defineProperty(t,"__esModule",{value:!0}),t.parseMarkdown=function(e){const t=e.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n"),h={title:"",description:"",columns:[]};let d=null,f=[],u=!1;for(let e=0;e<t.length;e++){const p=t[e],g=e+1;if(!u){const e=p.match(i);if(e){h.title=e[1].trim();continue}const t=p.match(n);if(t){h.description?h.description+="\n"+t[1]:h.description=t[1];continue}}const v=p.match(s);if(v){u=!0;const e=v[1].trim();d={title:e,line:g,isDoneColumn:e.toLowerCase().includes("done"),tasks:[]},h.columns.push(d),f=[];continue}const w=p.match(o);if(w&&d){const e=w[1].length,t="x"===w[2].toLowerCase(),i={text:w[3].trim(),checked:t,line:g,children:[],hasCheckbox:!0};for(;f.length>0&&f[f.length-1].indent>=e;)f.pop();f.length>0?f[f.length-1].task.children.push(i):d.tasks.push(i),f.push({task:i,indent:e});continue}const _=p.match(r);if(_&&d){const e=_[1].length,t=_[2],i="☑"===t||"✓"===t,n={text:_[3].trim(),checked:i,line:g,children:[],hasCheckbox:!0};for(;f.length>0&&f[f.length-1].indent>=e;)f.pop();f.length>0?f[f.length-1].task.children.push(n):d.tasks.push(n),f.push({task:n,indent:e});continue}const m=p.match(a);if(m&&f.length>0){const e={text:m[2].trim(),checked:!1,line:g,children:[],hasCheckbox:!1};f[f.length-1].task.children.push(e);continue}const b=p.match(c);if(b&&f.length>0){const e=b[1].length,t=b[2].trim();if(t.match(l))continue;const i={text:t,checked:!1,line:g,children:[],hasCheckbox:!1};for(;f.length>1&&f[f.length-1].indent>=e;)f.pop();f.length>0&&f[f.length-1].task.children.push(i)}}return h};const i=/^#\s+([^#].*)$/,n=/^>\s*(.*)$/,s=/^##\s+(.+)$/,o=/^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/,r=/^(\s*)[-*]\s+([☐☑✓✗])\s+(.+)$/,a=/^(\s*)[-*]\s+>\s*(.+)$/,c=/^(\s+)[-*]\s+(.+)$/,l=/^\[[ xX]\]|^[☐☑✓✗]/},398(e){e.exports=require("vscode")},522(e,t){Object.defineProperty(t,"__esModule",{value:!0}),t.toggleTaskInContent=function(e,t,i){const{lines:a,lineEnding:c}=d(e),l=t-1;if(l>=0&&l<a.length){const e=a[l];if(i){let t=e.replace(n,"$1[x]");t=t.replace(o,"$1☑"),a[l]=t}else{let t=e.replace(s,"$1[ ]");t=t.replace(r,"$1☐"),a[l]=t}}return a.join(c)},t.moveTaskInContent=function(e,t,n,s="bottom",o){const{lines:r,lineEnding:a}=d(e),c=t-1,l=[],f=r[c]?.match(i)?.[1].length??0;l.push(r[c]);let u=c+1;for(;u<r.length;){const e=r[u],t=e.match(i)?.[1].length??0;if(""===e.trim())break;if(t<=f&&""!==e.trim())break;l.push(e),u++}const p=l.map(e=>e.startsWith(" ".repeat(f))?e.slice(f):e),g=[...r.slice(0,c),...r.slice(c+l.length)];let v=-1,w=o;void 0!==o&&t<o&&(w=o-l.length);for(let e=0;e<g.length;e++){const t=g[e].match(h);if(t){const o=t[1].trim();if(o===n||o.startsWith(n)){if("top"===s){let t=e+1;for(;t<g.length&&""===g[t].trim();)t++;v=t}else if("after"===s&&void 0!==w){const e=w-1;if(e>=0&&e<g.length){const t=g[e]?.match(i)?.[1].length??0;let n=e+1;for(;n<g.length;){const e=g[n],s=e.match(i)?.[1].length??0;if(""===e.trim()||s<=t)break;n++}v=n}}else{let t=e+1;for(;t<g.length&&!g[t].match(h);)t++;v=t}break}}}if(-1===v)return e;const _=[...g.slice(0,v),...p,"",...g.slice(v)],m=[];let b=!1;for(const e of _){const t=""===e.trim();t&&b||(m.push(e),b=t)}return m.join(a)},t.moveTaskToParent=function(e,t,n,s="bottom",o){const{lines:r,lineEnding:c}=d(e),l=t-1,h=n-1,f=r[l];if(!f)return e;const u=f.match(a);if(!u)return e;const p=u[1]||"[ ]",g=u[2],v=r[h];if(!v)return e;const w=v.match(i)?.[1].length??0,_=" ".repeat(w+2),m=[],b=f.match(i)?.[1].length??0;m.push(`${_}- ${p} ${g}`);let k=l+1;for(;k<r.length;){const e=r[k],t=e.match(i)?.[1].length??0;if(""===e.trim())break;if(t<=b&&""!==e.trim())break;const n=e.match(/^(\s*)(.+)$/);if(n){const e=" ".repeat(w+2+(t-b));m.push(`${e}${n[2]}`)}k++}const F=k-l;let y=h;l<h&&(y=h-F);const T=[...r.slice(0,l),...r.slice(l+F)];let x;const P=T[y],S=P?.match(i)?.[1].length??0;if("top"===s)x=y+1;else if("after"===s&&void 0!==o){let e=o;l<o&&(e=o-F);const t=e-1;if(t>=0&&t<T.length){const e=T[t]?.match(i)?.[1].length??0;for(x=t+1;x<T.length;){const t=T[x],n=t.match(i)?.[1].length??0;if(""===t.trim()||n<=e)break;x++}}else x=y+1}else for(x=y+1;x<T.length;){const e=T[x],t=e.match(i)?.[1].length??0;if(""===e.trim())break;if(t<=S)break;x++}const j=[...T.slice(0,x),...m,...T.slice(x)],C=[];let O=!1;for(const e of j){const t=""===e.trim();t&&O||(C.push(e),O=t)}return C.join(c)},t.addTaskToSection=function(e,t){const{lines:i,lineEnding:n}=d(e);let s=-1;for(let e=0;e<i.length;e++){const n=i[e].match(h);if(n&&n[1].trim()===t){s=e;break}}if(-1===s)return{content:e,line:-1};let o=s+1;for(;o<i.length&&""===i[o].trim();)o++;return i.splice(o,0,"- [ ] New task"),{content:i.join(n),line:o+1}},t.editTaskTextInContent=function(e,t,i){const{lines:n,lineEnding:s}=d(e),o=t-1;if(o<0||o>=n.length)return e;const r=n[o],a=r.match(c);if(a)return n[o]=a[1]+i,n.join(s);const h=r.match(l);return h?(n[o]=h[1]+i,n.join(s)):e},t.addSubtaskToParent=function(e,t){const{lines:n,lineEnding:s}=d(e),o=t-1;if(o<0||o>=n.length)return{content:e,line:-1};const r=n[o],a=r.match(i)?.[1].length??0,c=" ".repeat(a+2);let l=o+1;for(;l<n.length;){const e=n[l],t=e.match(i)?.[1].length??0;if(""===e.trim())break;if(t<=a)break;l++}const h=`${c}- [ ] New task`;return n.splice(l,0,h),{content:n.join(s),line:l+1}},t.removeCheckboxFromTask=function(e,t){const{lines:i,lineEnding:n}=d(e),s=t-1;if(s<0||s>=i.length)return e;const o=i[s],r=o.match(/^(\s*[-*]\s+)\[[ xX]\]\s+(.+)$/);if(r)return i[s]=r[1]+r[2],i.join(n);const a=o.match(/^(\s*[-*]\s+)[☐☑✓✗]\s+(.+)$/);return a?(i[s]=a[1]+a[2],i.join(n)):e};const i=/^(\s*)/,n=/([-*]\s+)\[ \]/,s=/([-*]\s+)\[[xX]\]/,o=/([-*]\s+)☐/,r=/([-*]\s+)[☑✓]/,a=/^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.+)$/,c=/^(\s*[-*]\s+\[[ xX]\]\s+)(.+)$/,l=/^(\s*[-*]\s+[☐☑✓✗]\s+)(.+)$/,h=/^##\s+(.+)$/;function d(e){const t=e.includes("\r\n")?"\r\n":"\n";return{lines:e.split(/\r?\n/),lineEnding:t}}},896(e){e.exports=require("fs")},913(e,t,i){var n,s=this&&this.__createBinding||(Object.create?function(e,t,i,n){void 0===n&&(n=i);var s=Object.getOwnPropertyDescriptor(t,i);s&&!("get"in s?!t.__esModule:s.writable||s.configurable)||(s={enumerable:!0,get:function(){return t[i]}}),Object.defineProperty(e,n,s)}:function(e,t,i,n){void 0===n&&(n=i),e[n]=t[i]}),o=this&&this.__setModuleDefault||(Object.create?function(e,t){Object.defineProperty(e,"default",{enumerable:!0,value:t})}:function(e,t){e.default=t}),r=this&&this.__importStar||(n=function(e){return n=Object.getOwnPropertyNames||function(e){var t=[];for(var i in e)Object.prototype.hasOwnProperty.call(e,i)&&(t[t.length]=i);return t},n(e)},function(e){if(e&&e.__esModule)return e;var t={};if(null!=e)for(var i=n(e),r=0;r<i.length;r++)"default"!==i[r]&&s(t,e,i[r]);return o(t,e),t});Object.defineProperty(t,"__esModule",{value:!0}),t.KanbanViewProvider=void 0;const a=r(i(398)),c=r(i(928)),l=r(i(896)),h=i(337),d=i(522);t.KanbanViewProvider=class{_context;static viewType="todoSidebar.kanbanView";_view;_activeFileUri;_board;_disposables=[];_pendingEditLine;constructor(e){this._context=e}resolveWebviewView(e,t,i){this._view=e,e.webview.options={enableScripts:!0,localResourceRoots:[this._context.extensionUri]},e.webview.html=this._getHtmlForWebview(e.webview),e.onDidChangeVisibility(()=>{e.visible&&this._activeFileUri&&this._refresh()}),e.webview.onDidReceiveMessage(async e=>{switch(e.type){case"toggle":await this._handleToggle(e.line,e.checked,e.targetColumn);break;case"move":await this._handleMove(e.taskLine,e.targetSection,e.position,e.afterLine);break;case"openAtLine":await this._handleOpenAtLine(e.line);break;case"getColumns":this._board&&this._view?.webview.postMessage({type:"columnsForPicker",columns:this._board.columns.map(e=>({title:e.title,isDoneColumn:e.isDoneColumn})),taskLine:e.line});break;case"moveToParent":await this._handleMoveToParent(e.taskLine,e.parentLine,e.position,e.afterLine);break;case"addTask":await this._handleAddTask(e.section);break;case"editTaskText":await this._handleEditTaskText(e.line,e.newText);break;case"addSubtask":await this._handleAddSubtask(e.parentLine)}}),0===this._disposables.length&&this._setupFileWatchers();const n=a.workspace.getConfiguration("todoSidebar").get("activeFile");if(console.log("Attempting to restore activeFile from settings:",n),n)try{this._activeFileUri=a.Uri.file(n),console.log("Restored activeFile:",this._activeFileUri.fsPath)}catch(e){console.error("Failed to restore saved file:",e)}this._activeFileUri&&this._refresh()}_setupFileWatchers(){this._disposables.push(a.workspace.onDidChangeTextDocument(e=>{this._activeFileUri&&e.document.uri.toString()===this._activeFileUri.toString()&&this._refresh()}));const e=a.workspace.createFileSystemWatcher("**/*.md");this._disposables.push(e.onDidChange(e=>{this._activeFileUri&&e.toString()===this._activeFileUri.toString()&&this._refresh()})),this._disposables.push(e)}async setActiveFile(e){this._activeFileUri=e;try{if(!(a.workspace.workspaceFolders&&a.workspace.workspaceFolders.length>0))return console.error("No workspace folder open - cannot save to workspace settings"),a.window.showWarningMessage("Please open a folder/workspace to persist the todo file selection"),void await this._refresh();const t=a.workspace.workspaceFolders[0],i=a.Uri.joinPath(t.uri,".vscode"),n=a.Uri.joinPath(i,"settings.json");try{await a.workspace.fs.stat(i)}catch{await a.workspace.fs.createDirectory(i),console.log("Created .vscode directory")}let s={},o="";try{const e=await a.workspace.fs.readFile(n);o=Buffer.from(e).toString("utf-8");const t=o.replace(/\/\/.*$/gm,"").replace(/\/\*[\s\S]*?\*\//g,"");s=JSON.parse(t)}catch(e){console.log("Creating new settings.json file (or couldn't parse existing)")}s["todoSidebar.activeFile"]=e.fsPath;const r=JSON.stringify(s,null,4);await a.workspace.fs.writeFile(n,Buffer.from(r,"utf-8")),console.log("Saved activeFile to .vscode/settings.json:",e.fsPath)}catch(e){console.error("Failed to save activeFile to settings:",e),a.window.showErrorMessage(`Failed to save todo file selection: ${e}`)}await this._refresh()}async refresh(){await this._refresh()}async _readActiveFile(){if(!this._activeFileUri)return"";const e=await a.workspace.fs.readFile(this._activeFileUri);return Buffer.from(e).toString("utf-8")}async _writeActiveFile(e){this._activeFileUri&&await a.workspace.fs.writeFile(this._activeFileUri,Buffer.from(e,"utf-8"))}async _refresh(){if(this._activeFileUri&&this._view)try{const e=await this._readActiveFile();this._board=(0,h.parseMarkdown)(e);const t=this._pendingEditLine;this._pendingEditLine=void 0,this._view.webview.postMessage({type:"update",board:this._board,editLine:t})}catch(e){console.error("Error refreshing kanban board:",e)}}async _handleToggle(e,t,i){if(this._activeFileUri&&this._board)try{let n=await this._readActiveFile();n=(0,d.toggleTaskInContent)(n,e,t);const s=this._isTopLevelTask(e);if(t&&s){const t=this._board.columns.find(e=>e.isDoneColumn);if(t){const i=this._findTaskColumn(e);i&&!i.isDoneColumn&&(n=(0,d.moveTaskInContent)(n,e,t.title,"top"))}}else i&&s&&(n=(0,d.moveTaskInContent)(n,e,i,"top"));await this._writeActiveFile(n)}catch(e){console.error("Error toggling task:",e)}}_isTopLevelTask(e){if(!this._board)return!1;for(const t of this._board.columns)for(const i of t.tasks)if(i.line===e)return!0;return!1}_findTaskColumn(e){if(!this._board)return;const t=i=>{for(const n of i){if(n.line===e)return!0;if(t(n.children))return!0}return!1};for(const e of this._board.columns)if(t(e.tasks))return e}async _handleMove(e,t,i="bottom",n){if(this._activeFileUri)try{let s=await this._readActiveFile();s=(0,d.moveTaskInContent)(s,e,t,i,n),await this._writeActiveFile(s)}catch(e){console.error("Error moving task:",e)}}async _handleMoveToParent(e,t,i="bottom",n){if(this._activeFileUri)try{let s=await this._readActiveFile();s=(0,d.moveTaskToParent)(s,e,t,i,n),await this._writeActiveFile(s)}catch(e){console.error("Error moving task to parent:",e)}}async _handleOpenAtLine(e){if(this._activeFileUri)try{const t=await a.workspace.openTextDocument(this._activeFileUri),i=await a.window.showTextDocument(t),n=new a.Position(e-1,0);i.selection=new a.Selection(n,n),i.revealRange(new a.Range(n,n),a.TextEditorRevealType.InCenter)}catch(e){console.error("Error opening file at line:",e)}}async _handleAddTask(e){if(this._activeFileUri)try{const t=await this._readActiveFile(),i=(0,d.addTaskToSection)(t,e);i.line>0&&(this._pendingEditLine=i.line,await this._writeActiveFile(i.content))}catch(e){console.error("Error adding task:",e)}}async _handleEditTaskText(e,t){if(this._activeFileUri)try{let i=await this._readActiveFile();i=(0,d.editTaskTextInContent)(i,e,t),await this._writeActiveFile(i)}catch(e){console.error("Error editing task text:",e)}}async _handleAddSubtask(e){if(this._activeFileUri)try{const t=await this._readActiveFile(),i=(0,d.addSubtaskToParent)(t,e);i.line>0&&(this._pendingEditLine=i.line,await this._writeActiveFile(i.content))}catch(e){console.error("Error adding subtask:",e)}}_getHtmlForWebview(e){const t=function(){let e="";const t="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";for(let i=0;i<32;i++)e+=t.charAt(Math.floor(62*Math.random()));return e}(),i=c.join(this._context.extensionPath,"src","webview.html");let n=l.readFileSync(i,"utf-8");return n=n.replace(/\{\{cspSource\}\}/g,e.cspSource),n=n.replace(/\{\{nonce\}\}/g,t),n}dispose(){for(const e of this._disposables)e.dispose()}}},928(e){e.exports=require("path")}},t={},i=function i(n){var s=t[n];if(void 0!==s)return s.exports;var o=t[n]={exports:{}};return e[n].call(o.exports,o,o.exports,i),o.exports}(265);module.exports=i})();
+/******/ (() => { // webpackBootstrap
+/******/ 	"use strict";
+/******/ 	var __webpack_modules__ = ([
+/* 0 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.activate = activate;
+exports.deactivate = deactivate;
+const vscode = __importStar(__webpack_require__(1));
+const KanbanViewProvider_1 = __webpack_require__(2);
+let kanbanProvider;
+function activate(context) {
+    console.log('Todo Sidebar extension is now active!');
+    // Create and register the webview provider
+    kanbanProvider = new KanbanViewProvider_1.KanbanViewProvider(context);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(KanbanViewProvider_1.KanbanViewProvider.viewType, kanbanProvider));
+    // Register open file command
+    const openFileCommand = vscode.commands.registerCommand('todoSidebar.openFile', async () => {
+        const fileUri = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            filters: {
+                'Markdown': ['md']
+            },
+            title: 'Select a Markdown file for the Todo Board'
+        });
+        if (fileUri && fileUri[0]) {
+            await kanbanProvider.setActiveFile(fileUri[0]);
+            vscode.window.showInformationMessage(`Loaded: ${fileUri[0].fsPath}`);
+        }
+    });
+    // Register refresh command
+    const refreshCommand = vscode.commands.registerCommand('todoSidebar.refresh', async () => {
+        await kanbanProvider.refresh();
+    });
+    context.subscriptions.push(openFileCommand, refreshCommand);
+}
+function deactivate() {
+    if (kanbanProvider) {
+        kanbanProvider.dispose();
+    }
+}
+
+
+/***/ }),
+/* 1 */
+/***/ ((module) => {
+
+module.exports = require("vscode");
+
+/***/ }),
+/* 2 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.KanbanViewProvider = void 0;
+const vscode = __importStar(__webpack_require__(1));
+const path = __importStar(__webpack_require__(3));
+const fs = __importStar(__webpack_require__(4));
+const parser_1 = __webpack_require__(5);
+const serializer_1 = __webpack_require__(6);
+class KanbanViewProvider {
+    _context;
+    static viewType = 'todoSidebar.kanbanView';
+    _view;
+    _activeFileUri;
+    _board;
+    _disposables = [];
+    _pendingEditLine;
+    constructor(_context) {
+        this._context = _context;
+    }
+    resolveWebviewView(webviewView, _context, _token) {
+        this._view = webviewView;
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [this._context.extensionUri]
+        };
+        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        // Handle visibility changes - refresh when panel becomes visible
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible && this._activeFileUri) {
+                this._refresh();
+            }
+        });
+        // Handle messages from webview
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            switch (message.type) {
+                case 'toggle':
+                    await this._handleToggle(message.line, message.checked, message.targetColumn);
+                    break;
+                case 'move':
+                    await this._handleMove(message.taskLine, message.targetSection, message.position, message.afterLine);
+                    break;
+                case 'openAtLine':
+                    await this._handleOpenAtLine(message.line);
+                    break;
+                case 'getColumns':
+                    // Send column list back to webview for the picker
+                    if (this._board) {
+                        this._view?.webview.postMessage({
+                            type: 'columnsForPicker',
+                            columns: this._board.columns.map(c => ({ title: c.title, isDoneColumn: c.isDoneColumn })),
+                            taskLine: message.line
+                        });
+                    }
+                    break;
+                case 'moveToParent':
+                    await this._handleMoveToParent(message.taskLine, message.parentLine, message.position, message.afterLine);
+                    break;
+                case 'addTask':
+                    await this._handleAddTask(message.section);
+                    break;
+                case 'editTaskText':
+                    await this._handleEditTaskText(message.line, message.newText);
+                    break;
+                case 'addSubtask':
+                    await this._handleAddSubtask(message.parentLine);
+                    break;
+            }
+        });
+        // Set up file watchers only once
+        if (this._disposables.length === 0) {
+            this._setupFileWatchers();
+        }
+        // Restore file from workspace settings
+        const config = vscode.workspace.getConfiguration('todoSidebar');
+        const savedPath = config.get('activeFile');
+        console.log('Attempting to restore activeFile from settings:', savedPath);
+        if (savedPath) {
+            try {
+                // Support relative paths (e.g., "./README.md" or "docs/todo.md")
+                if (savedPath.startsWith('./') || savedPath.startsWith('../') || !path.isAbsolute(savedPath)) {
+                    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+                    if (workspaceFolder) {
+                        this._activeFileUri = vscode.Uri.joinPath(workspaceFolder.uri, savedPath);
+                    }
+                }
+                else {
+                    this._activeFileUri = vscode.Uri.file(savedPath);
+                }
+                if (this._activeFileUri) {
+                    console.log('Restored activeFile:', this._activeFileUri.fsPath);
+                }
+            }
+            catch (e) {
+                console.error('Failed to restore saved file:', e);
+            }
+        }
+        // Always refresh when view becomes visible
+        if (this._activeFileUri) {
+            this._refresh();
+        }
+    }
+    _setupFileWatchers() {
+        // Watch for text document changes
+        this._disposables.push(vscode.workspace.onDidChangeTextDocument((e) => {
+            if (this._activeFileUri && e.document.uri.toString() === this._activeFileUri.toString()) {
+                this._refresh();
+            }
+        }));
+        // Watch for file system changes
+        const watcher = vscode.workspace.createFileSystemWatcher('**/*.md');
+        this._disposables.push(watcher.onDidChange((uri) => {
+            if (this._activeFileUri && uri.toString() === this._activeFileUri.toString()) {
+                this._refresh();
+            }
+        }));
+        this._disposables.push(watcher);
+        // Watch for settings.json changes to pick up manual edits to activeFile
+        const settingsWatcher = vscode.workspace.createFileSystemWatcher('**/.vscode/settings.json');
+        this._disposables.push(settingsWatcher.onDidChange(() => {
+            this._reloadActiveFileFromConfig();
+        }));
+        this._disposables.push(settingsWatcher);
+        // Also watch for configuration changes (covers both file edits and UI changes)
+        this._disposables.push(vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('todoSidebar.activeFile')) {
+                this._reloadActiveFileFromConfig();
+            }
+        }));
+    }
+    _reloadActiveFileFromConfig() {
+        const config = vscode.workspace.getConfiguration('todoSidebar');
+        const savedPath = config.get('activeFile');
+        console.log('Config changed, reloading activeFile:', savedPath);
+        if (savedPath) {
+            try {
+                // Support relative paths (e.g., "./README.md" or "docs/todo.md")
+                if (savedPath.startsWith('./') || savedPath.startsWith('../') || !path.isAbsolute(savedPath)) {
+                    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+                    if (workspaceFolder) {
+                        this._activeFileUri = vscode.Uri.joinPath(workspaceFolder.uri, savedPath);
+                    }
+                }
+                else {
+                    this._activeFileUri = vscode.Uri.file(savedPath);
+                }
+                if (this._activeFileUri) {
+                    console.log('Reloaded activeFile:', this._activeFileUri.fsPath);
+                    this._refresh();
+                }
+            }
+            catch (e) {
+                console.error('Failed to reload saved file:', e);
+            }
+        }
+        else {
+            this._activeFileUri = undefined;
+            this._board = undefined;
+            this._view?.webview.postMessage({ type: 'update', board: null });
+        }
+    }
+    async setActiveFile(uri) {
+        this._activeFileUri = uri;
+        // Store in workspace settings by directly writing to .vscode/settings.json
+        try {
+            const hasWorkspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
+            if (!hasWorkspaceFolder) {
+                console.error('No workspace folder open - cannot save to workspace settings');
+                vscode.window.showWarningMessage('Please open a folder/workspace to persist the todo file selection');
+                await this._refresh();
+                return;
+            }
+            const workspaceFolder = vscode.workspace.workspaceFolders[0];
+            const vscodeDir = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode');
+            const settingsPath = vscode.Uri.joinPath(vscodeDir, 'settings.json');
+            // Ensure .vscode directory exists
+            try {
+                await vscode.workspace.fs.stat(vscodeDir);
+            }
+            catch {
+                await vscode.workspace.fs.createDirectory(vscodeDir);
+                console.log('Created .vscode directory');
+            }
+            // Read existing settings content
+            let existingText = '';
+            let fileExists = false;
+            try {
+                const content = await vscode.workspace.fs.readFile(settingsPath);
+                existingText = Buffer.from(content).toString('utf-8');
+                fileExists = true;
+            }
+            catch (e) {
+                // File doesn't exist
+            }
+            // Convert to relative path if within workspace
+            let savePath = uri.fsPath;
+            if (workspaceFolder) {
+                const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
+                // Use relative path if it doesn't start with ".." (i.e., file is within workspace)
+                if (!relativePath.startsWith('..')) {
+                    savePath = './' + relativePath.replace(/\\/g, '/');
+                }
+            }
+            // Update or insert the setting while preserving existing content
+            const escapedPath = JSON.stringify(savePath);
+            const settingPattern = /"todoSidebar\.activeFile"\s*:\s*"[^"]*"/;
+            let newText;
+            if (!fileExists || existingText.trim() === '') {
+                // Create new settings file
+                newText = `{\n    "todoSidebar.activeFile": ${escapedPath}\n}`;
+            }
+            else if (settingPattern.test(existingText)) {
+                // Update existing setting in place
+                newText = existingText.replace(settingPattern, `"todoSidebar.activeFile": ${escapedPath}`);
+            }
+            else {
+                // Insert new setting after opening brace, preserving rest of file
+                const insertMatch = existingText.match(/^\s*\{/);
+                if (insertMatch) {
+                    const insertPos = insertMatch[0].length;
+                    const before = existingText.slice(0, insertPos);
+                    const after = existingText.slice(insertPos);
+                    const needsComma = after.trim().length > 0 && after.trim() !== '}';
+                    const newSetting = `\n    "todoSidebar.activeFile": ${escapedPath}${needsComma ? ',' : ''}`;
+                    newText = before + newSetting + after;
+                }
+                else {
+                    // Fallback: file is malformed, create new
+                    newText = `{\n    "todoSidebar.activeFile": ${escapedPath}\n}`;
+                }
+            }
+            await vscode.workspace.fs.writeFile(settingsPath, Buffer.from(newText, 'utf-8'));
+            console.log('Saved activeFile to .vscode/settings.json:', uri.fsPath);
+        }
+        catch (e) {
+            console.error('Failed to save activeFile to settings:', e);
+            vscode.window.showErrorMessage(`Failed to save todo file selection: ${e}`);
+        }
+        await this._refresh();
+    }
+    async refresh() {
+        await this._refresh();
+    }
+    async _readActiveFile() {
+        if (!this._activeFileUri) {
+            return '';
+        }
+        const content = await vscode.workspace.fs.readFile(this._activeFileUri);
+        return Buffer.from(content).toString('utf-8');
+    }
+    async _writeActiveFile(text) {
+        if (!this._activeFileUri) {
+            return;
+        }
+        await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+    }
+    async _refresh() {
+        if (!this._activeFileUri || !this._view) {
+            return;
+        }
+        try {
+            const text = await this._readActiveFile();
+            this._board = (0, parser_1.parseMarkdown)(text);
+            const editLine = this._pendingEditLine;
+            this._pendingEditLine = undefined;
+            this._view.webview.postMessage({ type: 'update', board: this._board, editLine });
+        }
+        catch (error) {
+            console.error('Error refreshing kanban board:', error);
+        }
+    }
+    async _handleToggle(line, checked, targetColumn) {
+        if (!this._activeFileUri || !this._board) {
+            return;
+        }
+        try {
+            let text = await this._readActiveFile();
+            // Toggle the checkbox
+            text = (0, serializer_1.toggleTaskInContent)(text, line, checked);
+            // Only move top-level tasks to Done column (not subtasks)
+            const isTopLevel = this._isTopLevelTask(line);
+            if (checked && isTopLevel) {
+                // If checked and top-level, move to Done column at TOP
+                const doneColumn = this._board.columns.find((c) => c.isDoneColumn);
+                if (doneColumn) {
+                    const currentColumn = this._findTaskColumn(line);
+                    if (currentColumn && !currentColumn.isDoneColumn) {
+                        text = (0, serializer_1.moveTaskInContent)(text, line, doneColumn.title, 'top');
+                    }
+                }
+            }
+            else if (targetColumn && isTopLevel) {
+                // If unchecked and a target column is specified, move there at TOP
+                text = (0, serializer_1.moveTaskInContent)(text, line, targetColumn, 'top');
+            }
+            await this._writeActiveFile(text);
+        }
+        catch (error) {
+            console.error('Error toggling task:', error);
+        }
+    }
+    _isTopLevelTask(line) {
+        if (!this._board) {
+            return false;
+        }
+        for (const column of this._board.columns) {
+            for (const task of column.tasks) {
+                if (task.line === line) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    _findTaskColumn(line) {
+        if (!this._board) {
+            return undefined;
+        }
+        const findInTasks = (tasks) => {
+            for (const task of tasks) {
+                if (task.line === line) {
+                    return true;
+                }
+                if (findInTasks(task.children)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        for (const column of this._board.columns) {
+            if (findInTasks(column.tasks)) {
+                return column;
+            }
+        }
+        return undefined;
+    }
+    async _handleMove(taskLine, targetSection, position = 'bottom', afterLine) {
+        if (!this._activeFileUri) {
+            return;
+        }
+        try {
+            let text = await this._readActiveFile();
+            text = (0, serializer_1.moveTaskInContent)(text, taskLine, targetSection, position, afterLine);
+            await this._writeActiveFile(text);
+        }
+        catch (error) {
+            console.error('Error moving task:', error);
+        }
+    }
+    async _handleMoveToParent(taskLine, parentLine, position = 'bottom', afterLine) {
+        if (!this._activeFileUri) {
+            return;
+        }
+        try {
+            let text = await this._readActiveFile();
+            text = (0, serializer_1.moveTaskToParent)(text, taskLine, parentLine, position, afterLine);
+            await this._writeActiveFile(text);
+        }
+        catch (error) {
+            console.error('Error moving task to parent:', error);
+        }
+    }
+    async _handleOpenAtLine(line) {
+        if (!this._activeFileUri) {
+            return;
+        }
+        try {
+            const document = await vscode.workspace.openTextDocument(this._activeFileUri);
+            const editor = await vscode.window.showTextDocument(document);
+            const position = new vscode.Position(line - 1, 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+        }
+        catch (error) {
+            console.error('Error opening file at line:', error);
+        }
+    }
+    async _handleAddTask(section) {
+        if (!this._activeFileUri) {
+            return;
+        }
+        try {
+            const text = await this._readActiveFile();
+            const result = (0, serializer_1.addTaskToSection)(text, section);
+            if (result.line > 0) {
+                this._pendingEditLine = result.line;
+                await this._writeActiveFile(result.content);
+            }
+        }
+        catch (error) {
+            console.error('Error adding task:', error);
+        }
+    }
+    async _handleEditTaskText(line, newText) {
+        if (!this._activeFileUri) {
+            return;
+        }
+        try {
+            let text = await this._readActiveFile();
+            text = (0, serializer_1.editTaskTextInContent)(text, line, newText);
+            await this._writeActiveFile(text);
+        }
+        catch (error) {
+            console.error('Error editing task text:', error);
+        }
+    }
+    async _handleAddSubtask(parentLine) {
+        if (!this._activeFileUri) {
+            return;
+        }
+        try {
+            const text = await this._readActiveFile();
+            const result = (0, serializer_1.addSubtaskToParent)(text, parentLine);
+            if (result.line > 0) {
+                this._pendingEditLine = result.line;
+                await this._writeActiveFile(result.content);
+            }
+        }
+        catch (error) {
+            console.error('Error adding subtask:', error);
+        }
+    }
+    _getHtmlForWebview(webview) {
+        const nonce = getNonce();
+        // Read the HTML template file
+        const htmlPath = path.join(this._context.extensionPath, 'src', 'webview.html');
+        let html = fs.readFileSync(htmlPath, 'utf-8');
+        // Replace placeholders with actual values
+        html = html.replace(/\{\{cspSource\}\}/g, webview.cspSource);
+        html = html.replace(/\{\{nonce\}\}/g, nonce);
+        return html;
+    }
+    dispose() {
+        for (const disposable of this._disposables) {
+            disposable.dispose();
+        }
+    }
+}
+exports.KanbanViewProvider = KanbanViewProvider;
+function getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}
+
+
+/***/ }),
+/* 3 */
+/***/ ((module) => {
+
+module.exports = require("path");
+
+/***/ }),
+/* 4 */
+/***/ ((module) => {
+
+module.exports = require("fs");
+
+/***/ }),
+/* 5 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.parseMarkdown = parseMarkdown;
+// Regex constants for parsing markdown patterns
+const TITLE_REGEX = /^#\s+([^#].*)$/;
+const DESCRIPTION_REGEX = /^>\s*(.*)$/;
+const COLUMN_HEADER_REGEX = /^##\s+(.+)$/;
+const MD_TASK_REGEX = /^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/;
+const UNICODE_TASK_REGEX = /^(\s*)[-*]\s+([☐☑✓✗])\s+(.+)$/;
+const NESTED_QUOTE_REGEX = /^(\s*)[-*]\s+>\s*(.+)$/;
+const BULLET_REGEX = /^(\s+)[-*]\s+(.+)$/;
+const CHECKBOX_PREFIX_REGEX = /^\[[ xX]\]|^[☐☑✓✗]/;
+function parseMarkdown(content) {
+    // Normalize line endings (handle Windows \r\n and Mac \r)
+    const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = normalizedContent.split('\n');
+    const board = {
+        title: '',
+        description: '',
+        columns: []
+    };
+    let currentColumn = null;
+    let taskStack = [];
+    let foundFirstColumn = false;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const lineNumber = i + 1; // 1-indexed for editor navigation
+        // Board title: # Title (only before first column)
+        if (!foundFirstColumn) {
+            const titleMatch = line.match(TITLE_REGEX);
+            if (titleMatch) {
+                board.title = titleMatch[1].trim();
+                continue;
+            }
+            // Description: > text (only before first column, not indented)
+            const descMatch = line.match(DESCRIPTION_REGEX);
+            if (descMatch) {
+                if (board.description) {
+                    board.description += '\n' + descMatch[1];
+                }
+                else {
+                    board.description = descMatch[1];
+                }
+                continue;
+            }
+        }
+        // Column header: ## Section
+        const columnMatch = line.match(COLUMN_HEADER_REGEX);
+        if (columnMatch) {
+            foundFirstColumn = true;
+            const title = columnMatch[1].trim();
+            currentColumn = {
+                title,
+                line: lineNumber,
+                isDoneColumn: title.toLowerCase().includes('done'),
+                tasks: []
+            };
+            board.columns.push(currentColumn);
+            taskStack = [];
+            continue;
+        }
+        // Task with markdown checkbox: - [ ] or - [x] or * [ ] or * [x]
+        const taskMatch = line.match(MD_TASK_REGEX);
+        if (taskMatch && currentColumn) {
+            const indent = taskMatch[1].length;
+            const checked = taskMatch[2].toLowerCase() === 'x';
+            const text = taskMatch[3].trim();
+            const task = {
+                text,
+                checked,
+                line: lineNumber,
+                children: [],
+                hasCheckbox: true
+            };
+            // Find parent based on indentation
+            while (taskStack.length > 0 && taskStack[taskStack.length - 1].indent >= indent) {
+                taskStack.pop();
+            }
+            if (taskStack.length > 0) {
+                // Add as child to parent
+                taskStack[taskStack.length - 1].task.children.push(task);
+            }
+            else {
+                // Add as top-level task
+                currentColumn.tasks.push(task);
+            }
+            taskStack.push({ task, indent });
+            continue;
+        }
+        // Task with unicode checkbox: * ☐ or * ☑ or - ☐ or - ☑
+        const unicodeTaskMatch = line.match(UNICODE_TASK_REGEX);
+        if (unicodeTaskMatch && currentColumn) {
+            const indent = unicodeTaskMatch[1].length;
+            const checkChar = unicodeTaskMatch[2];
+            const checked = checkChar === '☑' || checkChar === '✓';
+            const text = unicodeTaskMatch[3].trim();
+            const task = {
+                text,
+                checked,
+                line: lineNumber,
+                children: [],
+                hasCheckbox: true
+            };
+            while (taskStack.length > 0 && taskStack[taskStack.length - 1].indent >= indent) {
+                taskStack.pop();
+            }
+            if (taskStack.length > 0) {
+                taskStack[taskStack.length - 1].task.children.push(task);
+            }
+            else {
+                currentColumn.tasks.push(task);
+            }
+            taskStack.push({ task, indent });
+            continue;
+        }
+        // Nested item with > prefix (like "  * > really good")
+        const nestedQuoteMatch = line.match(NESTED_QUOTE_REGEX);
+        if (nestedQuoteMatch && taskStack.length > 0) {
+            const text = nestedQuoteMatch[2].trim();
+            const childTask = {
+                text,
+                checked: false,
+                line: lineNumber,
+                children: [],
+                hasCheckbox: false
+            };
+            // Add to most recent task
+            taskStack[taskStack.length - 1].task.children.push(childTask);
+            continue;
+        }
+        // Nested bullet point: - item or * item (without checkbox, indented)
+        const bulletMatch = line.match(BULLET_REGEX);
+        if (bulletMatch && taskStack.length > 0) {
+            const indent = bulletMatch[1].length;
+            const text = bulletMatch[2].trim();
+            // Skip if it looks like a checkbox we didn't match
+            if (text.match(CHECKBOX_PREFIX_REGEX)) {
+                continue;
+            }
+            const childTask = {
+                text,
+                checked: false,
+                line: lineNumber,
+                children: [],
+                hasCheckbox: false
+            };
+            // Find appropriate parent based on indentation
+            while (taskStack.length > 1 && taskStack[taskStack.length - 1].indent >= indent) {
+                taskStack.pop();
+            }
+            if (taskStack.length > 0) {
+                taskStack[taskStack.length - 1].task.children.push(childTask);
+            }
+        }
+    }
+    return board;
+}
+
+
+/***/ }),
+/* 6 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.toggleTaskInContent = toggleTaskInContent;
+exports.moveTaskInContent = moveTaskInContent;
+exports.moveTaskToParent = moveTaskToParent;
+exports.addTaskToSection = addTaskToSection;
+exports.editTaskTextInContent = editTaskTextInContent;
+exports.addSubtaskToParent = addSubtaskToParent;
+exports.removeCheckboxFromTask = removeCheckboxFromTask;
+// Regex constants for checkbox and indentation patterns
+const INDENT_REGEX = /^(\s*)/;
+const MD_CHECKBOX_UNCHECKED_REGEX = /([-*]\s+)\[ \]/;
+const MD_CHECKBOX_CHECKED_REGEX = /([-*]\s+)\[[xX]\]/;
+const UNICODE_CHECKBOX_UNCHECKED_REGEX = /([-*]\s+)☐/;
+const UNICODE_CHECKBOX_CHECKED_REGEX = /([-*]\s+)[☑✓]/;
+const TASK_WITH_MD_CHECKBOX_REGEX = /^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.+)$/;
+const TASK_TEXT_MD_CHECKBOX_REGEX = /^(\s*[-*]\s+\[[ xX]\]\s+)(.+)$/;
+const TASK_TEXT_UNICODE_CHECKBOX_REGEX = /^(\s*[-*]\s+[☐☑✓✗]\s+)(.+)$/;
+const SECTION_HEADER_REGEX = /^##\s+(.+)$/;
+/**
+ * Helper function to parse content into lines while preserving line ending style
+ */
+function parseContentLines(content) {
+    const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+    const lines = content.split(/\r?\n/);
+    return { lines, lineEnding };
+}
+function toggleTaskInContent(content, line, checked) {
+    const { lines, lineEnding } = parseContentLines(content);
+    const lineIndex = line - 1; // Convert to 0-indexed
+    if (lineIndex >= 0 && lineIndex < lines.length) {
+        const currentLine = lines[lineIndex];
+        if (checked) {
+            // Handle markdown checkboxes: - [ ] or * [ ]
+            let newLine = currentLine.replace(MD_CHECKBOX_UNCHECKED_REGEX, '$1[x]');
+            // Handle unicode checkboxes: ☐ -> ☑
+            newLine = newLine.replace(UNICODE_CHECKBOX_UNCHECKED_REGEX, '$1☑');
+            lines[lineIndex] = newLine;
+        }
+        else {
+            // Handle markdown checkboxes: - [x] or * [x]
+            let newLine = currentLine.replace(MD_CHECKBOX_CHECKED_REGEX, '$1[ ]');
+            // Handle unicode checkboxes: ☑ or ✓ -> ☐
+            newLine = newLine.replace(UNICODE_CHECKBOX_CHECKED_REGEX, '$1☐');
+            lines[lineIndex] = newLine;
+        }
+    }
+    return lines.join(lineEnding);
+}
+function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bottom', afterLine) {
+    const { lines, lineEnding } = parseContentLines(content);
+    const lineIndex = taskLine - 1;
+    // Find the task and all its children (indented lines below it)
+    const taskLines = [];
+    const taskIndent = lines[lineIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
+    // Add the task line
+    taskLines.push(lines[lineIndex]);
+    // Add all children (lines with greater indentation following the task)
+    let i = lineIndex + 1;
+    while (i < lines.length) {
+        const currentLine = lines[i];
+        const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+        // Empty line or line with content at same/less indentation ends the block
+        if (currentLine.trim() === '') {
+            break;
+        }
+        if (currentIndent <= taskIndent && currentLine.trim() !== '') {
+            break;
+        }
+        taskLines.push(currentLine);
+        i++;
+    }
+    // De-indent the task block to become top-level
+    const deindentedLines = taskLines.map(line => {
+        if (line.startsWith(' '.repeat(taskIndent))) {
+            return line.slice(taskIndent);
+        }
+        return line;
+    });
+    // Remove the task block from original position
+    const beforeTask = lines.slice(0, lineIndex);
+    const afterTask = lines.slice(lineIndex + taskLines.length);
+    const newLines = [...beforeTask, ...afterTask];
+    // Find the target section and insert position
+    let targetInsertIndex = -1;
+    // If position is 'after', we need to find the line to insert after
+    // The afterLine was given in original line numbers, but we need to adjust for removed lines
+    let adjustedAfterLine = afterLine;
+    if (afterLine !== undefined && taskLine < afterLine) {
+        // Task was removed from before afterLine, so adjust
+        adjustedAfterLine = afterLine - taskLines.length;
+    }
+    for (let j = 0; j < newLines.length; j++) {
+        const sectionMatch = newLines[j].match(SECTION_HEADER_REGEX);
+        if (sectionMatch) {
+            const sectionTitle = sectionMatch[1].trim();
+            if (sectionTitle === targetSectionTitle || sectionTitle.startsWith(targetSectionTitle)) {
+                if (position === 'top') {
+                    // Insert right after the section header (skip empty lines)
+                    let insertAfterHeader = j + 1;
+                    while (insertAfterHeader < newLines.length && newLines[insertAfterHeader].trim() === '') {
+                        insertAfterHeader++;
+                    }
+                    targetInsertIndex = insertAfterHeader;
+                }
+                else if (position === 'after' && adjustedAfterLine !== undefined) {
+                    // Find the task at adjustedAfterLine and insert after it and its children
+                    const afterIndex = adjustedAfterLine - 1; // Convert to 0-indexed
+                    if (afterIndex >= 0 && afterIndex < newLines.length) {
+                        const afterTaskIndent = newLines[afterIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
+                        let insertAfter = afterIndex + 1;
+                        // Skip over children of the after task
+                        while (insertAfter < newLines.length) {
+                            const currentLine = newLines[insertAfter];
+                            const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+                            if (currentLine.trim() === '' || currentIndent <= afterTaskIndent) {
+                                break;
+                            }
+                            insertAfter++;
+                        }
+                        targetInsertIndex = insertAfter;
+                    }
+                }
+                else {
+                    // 'bottom' - Find the end of this section
+                    let endOfSection = j + 1;
+                    while (endOfSection < newLines.length) {
+                        if (newLines[endOfSection].match(SECTION_HEADER_REGEX)) {
+                            break;
+                        }
+                        endOfSection++;
+                    }
+                    targetInsertIndex = endOfSection;
+                }
+                break;
+            }
+        }
+    }
+    if (targetInsertIndex === -1) {
+        // Target section not found, return unchanged
+        return content;
+    }
+    // Insert task lines at the target position
+    const result = [
+        ...newLines.slice(0, targetInsertIndex),
+        ...deindentedLines,
+        '',
+        ...newLines.slice(targetInsertIndex)
+    ];
+    // Clean up multiple consecutive empty lines
+    const cleaned = [];
+    let lastWasEmpty = false;
+    for (const resultLine of result) {
+        const isEmpty = resultLine.trim() === '';
+        if (isEmpty && lastWasEmpty) {
+            continue;
+        }
+        cleaned.push(resultLine);
+        lastWasEmpty = isEmpty;
+    }
+    return cleaned.join(lineEnding);
+}
+function moveTaskToParent(content, taskLine, parentLine, position = 'bottom', afterLine) {
+    const { lines, lineEnding } = parseContentLines(content);
+    const taskIndex = taskLine - 1;
+    const parentIndex = parentLine - 1;
+    // Get the task line content
+    const taskContent = lines[taskIndex];
+    if (!taskContent) {
+        return content;
+    }
+    // Extract task text (remove leading whitespace, bullet, and checkbox)
+    const taskMatch = taskContent.match(TASK_WITH_MD_CHECKBOX_REGEX);
+    if (!taskMatch) {
+        return content;
+    }
+    const checkboxPart = taskMatch[1] || '[ ]';
+    const taskText = taskMatch[2];
+    // Get the parent's indentation level
+    const parentContent = lines[parentIndex];
+    if (!parentContent) {
+        return content;
+    }
+    const parentIndent = parentContent.match(INDENT_REGEX)?.[1].length ?? 0;
+    const childIndent = ' '.repeat(parentIndent + 2);
+    // Find all children of the task being moved (to move them too)
+    const taskLines = [];
+    const originalTaskIndent = taskContent.match(INDENT_REGEX)?.[1].length ?? 0;
+    // The task itself, re-indented as a child
+    taskLines.push(`${childIndent}- ${checkboxPart} ${taskText}`);
+    // Find and re-indent any children of the moved task
+    let i = taskIndex + 1;
+    while (i < lines.length) {
+        const currentLine = lines[i];
+        const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+        if (currentLine.trim() === '') {
+            break;
+        }
+        if (currentIndent <= originalTaskIndent && currentLine.trim() !== '') {
+            break;
+        }
+        // Re-indent the child line
+        const childMatch = currentLine.match(/^(\s*)(.+)$/);
+        if (childMatch) {
+            const relativeIndent = currentIndent - originalTaskIndent;
+            const newIndent = ' '.repeat(parentIndent + 2 + relativeIndent);
+            taskLines.push(`${newIndent}${childMatch[2]}`);
+        }
+        i++;
+    }
+    // Remove the task (and its children) from original position
+    const originalTaskBlockLength = i - taskIndex;
+    // Calculate adjusted parent index after removal
+    let adjustedParentIndex = parentIndex;
+    if (taskIndex < parentIndex) {
+        adjustedParentIndex = parentIndex - originalTaskBlockLength;
+    }
+    // Remove task block
+    const beforeTask = lines.slice(0, taskIndex);
+    const afterTask = lines.slice(taskIndex + originalTaskBlockLength);
+    const newLines = [...beforeTask, ...afterTask];
+    // Find insertion point - right after the parent or at end of parent's children
+    let insertIndex;
+    const adjustedParentContent = newLines[adjustedParentIndex];
+    const adjustedParentIndent = adjustedParentContent?.match(INDENT_REGEX)?.[1].length ?? 0;
+    if (position === 'top') {
+        // Insert right after parent line
+        insertIndex = adjustedParentIndex + 1;
+    }
+    else if (position === 'after' && afterLine !== undefined) {
+        // Calculate adjusted afterLine
+        let adjustedAfterLine = afterLine;
+        if (taskIndex < afterLine) {
+            adjustedAfterLine = afterLine - originalTaskBlockLength;
+        }
+        const afterIndex = adjustedAfterLine - 1; // Convert to 0-indexed
+        if (afterIndex >= 0 && afterIndex < newLines.length) {
+            // Find end of the "after" task's children
+            const afterTaskIndent = newLines[afterIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
+            insertIndex = afterIndex + 1;
+            while (insertIndex < newLines.length) {
+                const currentLine = newLines[insertIndex];
+                const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+                if (currentLine.trim() === '' || currentIndent <= afterTaskIndent) {
+                    break;
+                }
+                insertIndex++;
+            }
+        }
+        else {
+            // Fallback to end of parent's children
+            insertIndex = adjustedParentIndex + 1;
+        }
+    }
+    else {
+        // 'bottom' - Find end of parent's children
+        insertIndex = adjustedParentIndex + 1;
+        while (insertIndex < newLines.length) {
+            const currentLine = newLines[insertIndex];
+            const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+            if (currentLine.trim() === '') {
+                break;
+            }
+            if (currentIndent <= adjustedParentIndent) {
+                break;
+            }
+            insertIndex++;
+        }
+    }
+    // Insert the task lines
+    const result = [
+        ...newLines.slice(0, insertIndex),
+        ...taskLines,
+        ...newLines.slice(insertIndex)
+    ];
+    // Clean up multiple consecutive empty lines
+    const cleaned = [];
+    let lastWasEmpty = false;
+    for (const resultLine of result) {
+        const isEmpty = resultLine.trim() === '';
+        if (isEmpty && lastWasEmpty) {
+            continue;
+        }
+        cleaned.push(resultLine);
+        lastWasEmpty = isEmpty;
+    }
+    return cleaned.join(lineEnding);
+}
+function addTaskToSection(content, sectionTitle) {
+    const { lines, lineEnding } = parseContentLines(content);
+    // Find the section header
+    let sectionIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+        const match = lines[i].match(SECTION_HEADER_REGEX);
+        if (match && match[1].trim() === sectionTitle) {
+            sectionIndex = i;
+            break;
+        }
+    }
+    if (sectionIndex === -1) {
+        return { content, line: -1 };
+    }
+    // Find insertion point (skip blank lines after header)
+    let insertIndex = sectionIndex + 1;
+    while (insertIndex < lines.length && lines[insertIndex].trim() === '') {
+        insertIndex++;
+    }
+    // Insert new task
+    const newTask = '- [ ] New task';
+    lines.splice(insertIndex, 0, newTask);
+    return {
+        content: lines.join(lineEnding),
+        line: insertIndex + 1 // 1-indexed
+    };
+}
+function editTaskTextInContent(content, line, newText) {
+    const { lines, lineEnding } = parseContentLines(content);
+    const lineIndex = line - 1;
+    if (lineIndex < 0 || lineIndex >= lines.length) {
+        return content;
+    }
+    const currentLine = lines[lineIndex];
+    // Match markdown checkbox: - [ ] text or - [x] text
+    const mdMatch = currentLine.match(TASK_TEXT_MD_CHECKBOX_REGEX);
+    if (mdMatch) {
+        lines[lineIndex] = mdMatch[1] + newText;
+        return lines.join(lineEnding);
+    }
+    // Match unicode checkbox: - ☐ text or - ☑ text
+    const unicodeMatch = currentLine.match(TASK_TEXT_UNICODE_CHECKBOX_REGEX);
+    if (unicodeMatch) {
+        lines[lineIndex] = unicodeMatch[1] + newText;
+        return lines.join(lineEnding);
+    }
+    return content;
+}
+function addSubtaskToParent(content, parentLine) {
+    const { lines, lineEnding } = parseContentLines(content);
+    const parentIndex = parentLine - 1;
+    if (parentIndex < 0 || parentIndex >= lines.length) {
+        return { content, line: -1 };
+    }
+    const parentContent = lines[parentIndex];
+    const parentIndent = parentContent.match(INDENT_REGEX)?.[1].length ?? 0;
+    const childIndent = ' '.repeat(parentIndent + 2);
+    // Find insertion point: after parent and all its existing children
+    let insertIndex = parentIndex + 1;
+    while (insertIndex < lines.length) {
+        const currentLine = lines[insertIndex];
+        const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+        if (currentLine.trim() === '') {
+            break;
+        }
+        if (currentIndent <= parentIndent) {
+            break;
+        }
+        insertIndex++;
+    }
+    // Insert new subtask
+    const newTask = `${childIndent}- [ ] New task`;
+    lines.splice(insertIndex, 0, newTask);
+    return {
+        content: lines.join(lineEnding),
+        line: insertIndex + 1 // 1-indexed
+    };
+}
+function removeCheckboxFromTask(content, line) {
+    const { lines, lineEnding } = parseContentLines(content);
+    const lineIndex = line - 1;
+    if (lineIndex < 0 || lineIndex >= lines.length) {
+        return content;
+    }
+    const currentLine = lines[lineIndex];
+    // Match markdown checkbox: - [ ] text or - [x] text and convert to - text
+    const mdMatch = currentLine.match(/^(\s*[-*]\s+)\[[ xX]\]\s+(.+)$/);
+    if (mdMatch) {
+        lines[lineIndex] = mdMatch[1] + mdMatch[2];
+        return lines.join(lineEnding);
+    }
+    // Match unicode checkbox: - ☐ text or - ☑ text and convert to - text
+    const unicodeMatch = currentLine.match(/^(\s*[-*]\s+)[☐☑✓✗]\s+(.+)$/);
+    if (unicodeMatch) {
+        lines[lineIndex] = unicodeMatch[1] + unicodeMatch[2];
+        return lines.join(lineEnding);
+    }
+    return content;
+}
+
+
+/***/ })
+/******/ 	]);
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/************************************************************************/
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module is referenced by other modules so it can't be inlined
+/******/ 	var __webpack_exports__ = __webpack_require__(0);
+/******/ 	module.exports = __webpack_exports__;
+/******/ 	
+/******/ })()
+;
+//# sourceMappingURL=extension.js.map
