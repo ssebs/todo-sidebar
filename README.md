@@ -45,7 +45,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
-
+- !Don't delete all other content in settings.json!
 - Local path support: "todoSidebar.activeFile": "./README.md"
 - History support (ctrl+z, ctrl+y)
 - option to hide h2 sections & save the name to the settings json as an array
