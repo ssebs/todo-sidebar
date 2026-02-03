@@ -83,6 +83,7 @@ The selected markdown file path is persisted to `.vscode/settings.json` via the 
 
 - **Toggle checkbox**: Click checkbox to toggle. Only top-level tasks move to Done column when checked; subtasks just toggle in place.
 - **Drag and drop**: Reorder tasks within columns, move between columns, or nest under parent tasks.
+- **Right-click to move**: Right-click a task to show a context menu for moving it to any section (moves to top of target section).
 - **Double-click to edit**: Double-click anywhere on a task box (not just the text) to enter inline edit mode.
 - **Add task**: Click "+" button next to column header to add a new task.
 - **Add subtask**: Click "+" button on a task to add a subtask beneath it.

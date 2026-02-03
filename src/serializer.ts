@@ -457,3 +457,54 @@ export function removeCheckboxFromTask(
 
   return content;
 }
+
+export function deleteTaskInContent(
+  content: string,
+  taskLine: number
+): string {
+  const { lines, lineEnding } = parseContentLines(content);
+  const lineIndex = taskLine - 1;
+
+  if (lineIndex < 0 || lineIndex >= lines.length) {
+    return content;
+  }
+
+  // Find the task and all its children (indented lines below it)
+  const taskIndent = lines[lineIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
+
+  // Count lines to remove (task + all children)
+  let linesToRemove = 1;
+  let i = lineIndex + 1;
+  while (i < lines.length) {
+    const currentLine = lines[i];
+    const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+
+    // Empty line or line with content at same/less indentation ends the block
+    if (currentLine.trim() === '') {
+      break;
+    }
+    if (currentIndent <= taskIndent && currentLine.trim() !== '') {
+      break;
+    }
+
+    linesToRemove++;
+    i++;
+  }
+
+  // Remove the task block
+  lines.splice(lineIndex, linesToRemove);
+
+  // Clean up multiple consecutive empty lines
+  const cleaned: string[] = [];
+  let lastWasEmpty = false;
+  for (const resultLine of lines) {
+    const isEmpty = resultLine.trim() === '';
+    if (isEmpty && lastWasEmpty) {
+      continue;
+    }
+    cleaned.push(resultLine);
+    lastWasEmpty = isEmpty;
+  }
+
+  return cleaned.join(lineEnding);
+}

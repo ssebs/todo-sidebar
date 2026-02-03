@@ -298,6 +298,12 @@
       color: var(--vscode-descriptionForeground);
       cursor: default;
     }
+    .context-menu-delete {
+      color: var(--vscode-errorForeground, #f14c4c);
+    }
+    .context-menu-delete:hover {
+      background: var(--vscode-inputValidation-errorBackground, rgba(241, 76, 76, 0.2));
+    }
   </style>
 </head>
 <body>
@@ -457,6 +463,18 @@
         menu.appendChild(item);
       });
 
+      // Add separator before delete
+      const deleteSeparator = document.createElement('div');
+      deleteSeparator.className = 'context-menu-separator';
+      menu.appendChild(deleteSeparator);
+
+      // Add delete option
+      const deleteItem = document.createElement('button');
+      deleteItem.className = 'context-menu-item context-menu-delete';
+      deleteItem.textContent = 'Delete';
+      deleteItem.dataset.action = 'delete';
+      menu.appendChild(deleteItem);
+
       // Position the menu at cursor
       menu.style.left = e.clientX + 'px';
       menu.style.top = e.clientY + 'px';
@@ -476,9 +494,14 @@
       menu.addEventListener('click', (evt) => {
         const item = evt.target.closest('.context-menu-item');
         if (item && !item.classList.contains('disabled')) {
-          const targetColumn = item.dataset.column;
-          vscode.postMessage({ type: 'move', taskLine, targetSection: targetColumn, position: 'top' });
-          menu.remove();
+          if (item.dataset.action === 'delete') {
+            vscode.postMessage({ type: 'deleteTask', line: taskLine });
+            menu.remove();
+          } else if (item.dataset.column) {
+            const targetColumn = item.dataset.column;
+            vscode.postMessage({ type: 'move', taskLine, targetSection: targetColumn, position: 'top' });
+            menu.remove();
+          }
         }
       });
 

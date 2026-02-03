@@ -4,8 +4,6 @@
 
 ## In Progress 🚀
 
-- [ ] Test item 3
-
 - [ ] Create the extension
   - [x] vibe code it
   - [x] make it work

@@ -15,6 +15,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - **Kanban board view** - Visualize tasks across columns defined by `## Headers`
 - **Live sync** - Changes in the editor instantly update the board and vice versa
 - **Drag and drop** - Move tasks between columns or nest them under parent tasks
+- **Right-click to move** - Right-click any task to quickly move it to a different section
 - **Nested tasks** - Support for subtasks
 - **Add tasks** - Click "+" to add tasks to columns or subtasks to existing tasks
 - **Inline editing** - Double-click any task to edit its text
@@ -40,6 +41,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 - Click the + to add a task, or the arrow to open in the editor
 - Drag tasks between columns, check/uncheck to toggle status
+- Right-click a task to move it to any section
 - Check the boxes to mark tasks as done
 
 ## Screenshot / gif
@@ -54,7 +56,6 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
   - existing provider lifecycle
 - option to hide h2 sections & save the name to the settings json as an array
 - When you open the extension without any file saved, pick a file automatically
-- add delete task button when right clicking task
 - don't shrink text on grandchild tasks, keep at same size as child tasks
 
 ## Markdown Format

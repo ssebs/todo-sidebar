@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { parseMarkdown, Board, Task, Column } from './parser';
-import { toggleTaskInContent, moveTaskInContent, moveTaskToParent, addTaskToSection, editTaskTextInContent, addSubtaskToParent } from './serializer';
+import { toggleTaskInContent, moveTaskInContent, moveTaskToParent, addTaskToSection, editTaskTextInContent, addSubtaskToParent, deleteTaskInContent } from './serializer';
 
 export class KanbanViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'todoSidebar.kanbanView';
@@ -81,6 +81,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           break;
         case 'redo':
           await this._handleRedo();
+          break;
+        case 'deleteTask':
+          await this._handleDeleteTask(message.line);
           break;
       }
     });
@@ -531,6 +534,20 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       }
     } catch (error) {
       console.error('Error adding subtask:', error);
+    }
+  }
+
+  private async _handleDeleteTask(line: number) {
+    if (!this._activeFileUri) {
+      return;
+    }
+
+    try {
+      let text = await this._readActiveFile();
+      text = deleteTaskInContent(text, line);
+      await this._writeActiveFile(text);
+    } catch (error) {
+      console.error('Error deleting task:', error);
     }
   }
 
