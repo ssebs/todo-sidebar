@@ -1,3 +1,5 @@
 {
-    "todoSidebar.activeFile": "/home/ssebs/_code/todo-sidebar/test_data/TODO.md"
+     "files.exclude": {
+        "**/test_hidden.txt": true,
+    },
 }
