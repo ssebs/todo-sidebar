@@ -1,6 +1,4 @@
 {
-    "todoSidebar.onDoneAction": "move",
-    "todoSidebar.activeFile": "./TODO.md",
   "files.exclude": {
     "**/test_hidden.txt": true
   }

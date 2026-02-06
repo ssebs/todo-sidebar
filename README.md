@@ -79,8 +79,6 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
 
 ## TODO
 
-- option to hide h2 sections & save the name to the settings json as an array
-  - Hide "done" category unless hovered / expanded
 - When you open the extension without any file saved, make it easy to pick a file
 - H3 sub categories
 - More MD features:
