@@ -44,9 +44,11 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - Right-click a task to move it to any section
 - Check the boxes to mark tasks as done
 
-## Screenshot / gif
+## Demo
 
-![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
+https://github.com/user-attachments/assets/0445ddbf-397e-44e0-82cc-05b51b88b549
+
+
 
 ## Configuration
 
