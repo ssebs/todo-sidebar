@@ -88,11 +88,21 @@ The selected markdown file path is persisted to `.vscode/settings.json` via the 
   - `"delete"`: Immediately deletes task and all its children without toggling checkbox. No confirmation dialog - relies on VSCode's undo (Ctrl+Z) for recovery.
   - Only affects top-level tasks; subtasks always just toggle in place regardless of this setting.
 
+- **todoSidebar.hiddenSections** (array of strings): List of section names (H2 headers) to hide from the board view. Defaults to [] (empty array, all sections visible). Stored in `.vscode/settings.json`.
+  - Example: `["Done", "Archive"]` will hide sections titled "Done" and "Archive"
+  - Supports wildcard patterns: `["*Done*"]` matches any section with "Done" in the name (converted to regex `.*Done.*`)
+  - Supports regex patterns: `["^Done$", "Archive.*"]` for complex matching (case-insensitive)
+  - Section matching is case-insensitive for exact and wildcard matches
+  - Hidden sections remain in the markdown file and are only filtered from the webview display
+  - Changes to this setting trigger a board refresh automatically
+  - Users can right-click a section header in the webview to hide it instantly (updates settings.json)
+
 ### UI Features
 
 - **Toggle checkbox**: Click checkbox to toggle. Behavior for top-level tasks depends on `todoSidebar.onDoneAction` setting: either move to Done column (default) or delete entirely. Subtasks always just toggle in place.
 - **Drag and drop**: Reorder tasks within columns, move between columns, or nest under parent tasks.
-- **Right-click to move**: Right-click a task to show a context menu for moving it to any section (moves to top of target section).
+- **Right-click task to move**: Right-click a task to show a context menu for moving it to any section (moves to top of target section).
+- **Right-click section to hide**: Right-click a section header to hide it from the board view (adds it to `hiddenSections` setting).
 - **Double-click to edit**: Double-click anywhere on a task box (not just the text) to enter inline edit mode.
 - **Add task**: Click "+" button next to column header to add a new task.
 - **Add subtask**: Click "+" button on a task to add a subtask beneath it.

@@ -92,6 +92,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         case 'deleteTask':
           await this._handleDeleteTask(message.line);
           break;
+        case 'hideSection':
+          await this._handleHideSection(message.sectionTitle);
+          break;
       }
     });
 
@@ -189,6 +192,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         if (e.affectsConfiguration('todoSidebar.activeFile')) {
           this._reloadActiveFileFromConfig();
         }
+        if (e.affectsConfiguration('todoSidebar.hiddenSections')) {
+          this._refresh();
+        }
       })
     );
   }
@@ -279,28 +285,49 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
       // Update or insert the setting while preserving existing content
       const escapedPath = JSON.stringify(savePath);
-      const settingPattern = /"todoSidebar\.activeFile"\s*:\s*"[^"]*"/;
+      const activeFilePattern = /"todoSidebar\.activeFile"\s*:\s*"[^"]*"/;
+      const onDoneActionPattern = /"todoSidebar\.onDoneAction"\s*:\s*"[^"]*"/;
       let newText: string;
 
       if (!fileExists || existingText.trim() === '') {
-        // Create new settings file
-        newText = `{\n    "todoSidebar.activeFile": ${escapedPath}\n}`;
-      } else if (settingPattern.test(existingText)) {
-        // Update existing setting in place
-        newText = existingText.replace(settingPattern, `"todoSidebar.activeFile": ${escapedPath}`);
+        // Create new settings file with default onDoneAction
+        newText = `{\n    "todoSidebar.activeFile": ${escapedPath},\n    "todoSidebar.onDoneAction": "move"\n}`;
       } else {
-        // Insert new setting after opening brace, preserving rest of file
-        const insertMatch = existingText.match(/^\s*\{/);
-        if (insertMatch) {
-          const insertPos = insertMatch[0].length;
-          const before = existingText.slice(0, insertPos);
-          const after = existingText.slice(insertPos);
-          const needsComma = after.trim().length > 0 && after.trim() !== '}';
-          const newSetting = `\n    "todoSidebar.activeFile": ${escapedPath}${needsComma ? ',' : ''}`;
-          newText = before + newSetting + after;
+        // Parse existing file to check for settings
+        const hasActiveFile = activeFilePattern.test(existingText);
+        const hasOnDoneAction = onDoneActionPattern.test(existingText);
+
+        if (hasActiveFile) {
+          // Update existing activeFile setting in place
+          newText = existingText.replace(activeFilePattern, `"todoSidebar.activeFile": ${escapedPath}`);
         } else {
-          // Fallback: file is malformed, create new
-          newText = `{\n    "todoSidebar.activeFile": ${escapedPath}\n}`;
+          // Insert activeFile setting after opening brace
+          const insertMatch = existingText.match(/^\s*\{/);
+          if (insertMatch) {
+            const insertPos = insertMatch[0].length;
+            const before = existingText.slice(0, insertPos);
+            const after = existingText.slice(insertPos);
+            const needsComma = after.trim().length > 0 && after.trim() !== '}';
+            const newSetting = `\n    "todoSidebar.activeFile": ${escapedPath}${needsComma ? ',' : ''}`;
+            newText = before + newSetting + after;
+          } else {
+            // Fallback: file is malformed, create new
+            newText = `{\n    "todoSidebar.activeFile": ${escapedPath},\n    "todoSidebar.onDoneAction": "move"\n}`;
+          }
+        }
+
+        // Now check if onDoneAction needs to be added
+        if (!hasOnDoneAction) {
+          // Insert onDoneAction setting after opening brace (or after activeFile if just added)
+          const insertMatch = newText.match(/^\s*\{/);
+          if (insertMatch) {
+            const insertPos = insertMatch[0].length;
+            const before = newText.slice(0, insertPos);
+            const after = newText.slice(insertPos);
+            const needsComma = after.trim().length > 0 && after.trim() !== '}';
+            const onDoneSetting = `\n    "todoSidebar.onDoneAction": "move"${needsComma ? ',' : ''}`;
+            newText = before + onDoneSetting + after;
+          }
         }
       }
 
@@ -400,9 +427,21 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       }
 
       this._board = parseMarkdown(text);
+
+      // Filter out hidden sections based on configuration
+      const config = vscode.workspace.getConfiguration('todoSidebar');
+      const hiddenSections = config.get<string[]>('hiddenSections', []);
+
+      const filteredBoard = {
+        ...this._board,
+        columns: this._board.columns.filter(col =>
+          !this._isColumnHidden(col.title, hiddenSections)
+        )
+      };
+
       const editLine = this._pendingEditLine;
       this._pendingEditLine = undefined;
-      this._view.webview.postMessage({ type: 'update', board: this._board, editLine });
+      this._view.webview.postMessage({ type: 'update', board: filteredBoard, editLine });
     } catch (error) {
       console.error('Error refreshing kanban board:', error);
     }
@@ -490,6 +529,44 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     return undefined;
+  }
+
+  private _isColumnHidden(columnTitle: string, hiddenPatterns: string[]): boolean {
+    const lowerTitle = columnTitle.toLowerCase();
+
+    for (const pattern of hiddenPatterns) {
+      const lowerPattern = pattern.toLowerCase();
+
+      // Check if pattern contains regex special characters (besides *)
+      if (/[.+?^${}()|[\]\\]/.test(pattern)) {
+        // Treat as regex pattern
+        try {
+          const regex = new RegExp(pattern, 'i'); // case-insensitive
+          if (regex.test(columnTitle)) {
+            return true;
+          }
+        } catch (e) {
+          // Invalid regex, fall back to exact match
+          if (lowerTitle === lowerPattern) {
+            return true;
+          }
+        }
+      } else if (lowerPattern.includes('*')) {
+        // Simple wildcard pattern: convert * to .*
+        const regexPattern = '^' + lowerPattern.replace(/\*/g, '.*') + '$';
+        const regex = new RegExp(regexPattern);
+        if (regex.test(lowerTitle)) {
+          return true;
+        }
+      } else {
+        // Exact match (case-insensitive)
+        if (lowerTitle === lowerPattern) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   private async _handleMove(taskLine: number, targetSection: string, position: 'top' | 'bottom' | 'after' = 'bottom', afterLine?: number) {
@@ -597,6 +674,82 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       await this._writeActiveFile(text);
     } catch (error) {
       console.error('Error deleting task:', error);
+    }
+  }
+
+  private async _handleHideSection(sectionTitle: string) {
+    try {
+      const config = vscode.workspace.getConfiguration('todoSidebar');
+      const hiddenSections = config.get<string[]>('hiddenSections', []);
+
+      // Add the section if it's not already in the list
+      if (!hiddenSections.includes(sectionTitle)) {
+        hiddenSections.push(sectionTitle);
+
+        // Update the configuration in workspace settings
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+          vscode.window.showWarningMessage('No workspace folder open - cannot save hidden sections');
+          return;
+        }
+
+        const vscodeDir = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode');
+        const settingsPath = vscode.Uri.joinPath(vscodeDir, 'settings.json');
+
+        // Ensure .vscode directory exists
+        try {
+          await vscode.workspace.fs.stat(vscodeDir);
+        } catch {
+          await vscode.workspace.fs.createDirectory(vscodeDir);
+        }
+
+        // Read existing settings
+        let existingText = '';
+        let fileExists = false;
+        try {
+          const content = await vscode.workspace.fs.readFile(settingsPath);
+          existingText = Buffer.from(content).toString('utf-8');
+          fileExists = true;
+        } catch (e) {
+          // File doesn't exist
+        }
+
+        // Update or insert the hiddenSections setting
+        const escapedArray = JSON.stringify(hiddenSections);
+        const settingPattern = /"todoSidebar\.hiddenSections"\s*:\s*\[[^\]]*\]/;
+        let newText: string;
+
+        if (!fileExists || existingText.trim() === '') {
+          // Create new settings file
+          newText = `{\n    "todoSidebar.hiddenSections": ${escapedArray}\n}`;
+        } else if (settingPattern.test(existingText)) {
+          // Update existing setting
+          newText = existingText.replace(settingPattern, `"todoSidebar.hiddenSections": ${escapedArray}`);
+        } else {
+          // Insert new setting after opening brace
+          const insertMatch = existingText.match(/^\s*\{/);
+          if (insertMatch) {
+            const insertPos = insertMatch[0].length;
+            const before = existingText.slice(0, insertPos);
+            const after = existingText.slice(insertPos);
+            const needsComma = after.trim().length > 0 && after.trim() !== '}';
+            const newSetting = `\n    "todoSidebar.hiddenSections": ${escapedArray}${needsComma ? ',' : ''}`;
+            newText = before + newSetting + after;
+          } else {
+            // Fallback: file is malformed, create new
+            newText = `{\n    "todoSidebar.hiddenSections": ${escapedArray}\n}`;
+          }
+        }
+
+        await vscode.workspace.fs.writeFile(settingsPath, Buffer.from(newText, 'utf-8'));
+        console.log('Added section to hiddenSections:', sectionTitle);
+
+        // Show a message to the user
+        vscode.window.showInformationMessage(`Section "${sectionTitle}" is now hidden. Edit settings to unhide.`);
+      }
+    } catch (error) {
+      console.error('Error hiding section:', error);
+      vscode.window.showErrorMessage(`Failed to hide section: ${error}`);
     }
   }
 

@@ -55,7 +55,8 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
 ```json
 {
   "todoSidebar.activeFile": "./TODO.md",
-  "todoSidebar.onDoneAction": "move"
+  "todoSidebar.onDoneAction": "move",
+  "todoSidebar.hiddenSections": ["Done", "Hidden*"]
 }
 ```
 
@@ -68,11 +69,30 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
   - `"delete"`: Immediately deletes task and all its children. No confirmation dialog - use Ctrl+Z (Cmd+Z on Mac) to undo if needed.
   - Note: Only affects top-level tasks. Subtasks always just toggle in place.
 
+- **todoSidebar.hiddenSections** (array of strings): List of section names (H2 headers) to hide from the board view. Defaults to `[]` (empty array, all sections visible).
+  - Example: `["Done", "Archive"]` will hide sections titled "Done" and "Archive"
+  - Supports wildcards: `["*Done*", "Archive"]` will hide any section with "Done" in the name
+  - Supports regex patterns: `["^Done$", "Archive.*"]` (case-insensitive)
+  - Section names are case-insensitive
+  - Hidden sections remain in your markdown file and are only hidden from the board view
+  - **Quick hide:** Right-click any section header to hide it instantly
+
 ## TODO
 
 - option to hide h2 sections & save the name to the settings json as an array
   - Hide "done" category unless hovered / expanded
 - When you open the extension without any file saved, make it easy to pick a file
+- H3 sub categories
+- More MD features:
+  - regular bullet items
+    - not checkboxes
+    - "tied" to the parent, so when the parent moves these move too
+    - can be dragged & edited similar to subtask behavior
+    - can be on all 3 task levels
+  - edit section titles
+  - edit section descriptions
+  - add new section w/ + on title
+  - edit title
 - Cleanup main file - split into:
   - filesystem
   - parser + file parsing code is regex hell
@@ -86,7 +106,7 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
 
 > Optional description
 
-## In Progress
+## In Progress `
 
 - [ ] Task 1
 - [ ] Task 2

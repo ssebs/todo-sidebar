@@ -527,6 +527,61 @@
       }, 0);
     }
 
+    function showSectionContextMenu(e, sectionTitle) {
+      // Remove any existing context menu
+      const existingMenu = document.querySelector('.context-menu');
+      if (existingMenu) existingMenu.remove();
+
+      const menu = document.createElement('div');
+      menu.className = 'context-menu';
+
+      // Add "Hide section" option
+      const hideItem = document.createElement('button');
+      hideItem.className = 'context-menu-item';
+      hideItem.textContent = 'Hide section';
+      hideItem.dataset.action = 'hide';
+      menu.appendChild(hideItem);
+
+      // Position the menu at cursor
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+
+      document.body.appendChild(menu);
+
+      // Adjust position if menu goes off screen
+      const rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        menu.style.left = (window.innerWidth - rect.width - 5) + 'px';
+      }
+      if (rect.bottom > window.innerHeight) {
+        menu.style.top = (window.innerHeight - rect.height - 5) + 'px';
+      }
+
+      // Handle menu item clicks
+      menu.addEventListener('click', (evt) => {
+        const item = evt.target.closest('.context-menu-item');
+        if (item && item.dataset.action === 'hide') {
+          vscode.postMessage({ type: 'hideSection', sectionTitle });
+          menu.remove();
+        }
+      });
+
+      // Close menu when clicking outside
+      function closeMenu(evt) {
+        if (!menu.contains(evt.target)) {
+          menu.remove();
+          document.removeEventListener('click', closeMenu);
+          document.removeEventListener('contextmenu', closeMenu);
+        }
+      }
+
+      // Delay adding the listener to avoid immediate close
+      setTimeout(() => {
+        document.addEventListener('click', closeMenu);
+        document.addEventListener('contextmenu', closeMenu);
+      }, 0);
+    }
+
     function enterEditMode(taskElement) {
       const textSpan = taskElement.querySelector('.task-text');
       if (!textSpan || taskElement.querySelector('.task-edit-input')) {
@@ -627,6 +682,21 @@
           e.stopPropagation();
           const section = e.target.dataset.section;
           vscode.postMessage({ type: 'addTask', section });
+        });
+      });
+
+      // Right-click on column headers to hide sections
+      document.querySelectorAll('.column-header').forEach(header => {
+        header.addEventListener('contextmenu', (e) => {
+          // Only show context menu if not clicking on the add button
+          if (e.target.closest('.add-task-btn')) {
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          const column = header.closest('.column');
+          const sectionTitle = column.dataset.section;
+          showSectionContextMenu(e, sectionTitle);
         });
       });
 
