@@ -54,6 +54,8 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
   - parser + file parsing code is regex hell
   - handlers
   - existing provider lifecycle
+- Add option to delete completed tasks instead of moving to done. (or move to separate file?)
+- Can't move childtask to a grandchild task by dragging
 - option to hide h2 sections & save the name to the settings json as an array
 - When you open the extension without any file saved, pick a file automatically
 
