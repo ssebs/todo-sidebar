@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication style for user
+- Be concise, not verbose when telling the user something.
+
+- Ask clarifying questions if you need to make an ambiguous choice.
+
 ## Build Commands
 
 ```bash
@@ -28,8 +33,9 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
 - **extension.ts** - Entry point. Registers the webview provider and commands (`todoSidebar.openFile`, `todoSidebar.refresh`).
 
 - **KanbanViewProvider.ts** - The main webview provider. Contains:
-  - Loads HTML/CSS/JS from `webview.html` template file
-  - Message handlers for webview-to-extension communication (`toggle`, `move`, `moveToParent`, `getColumns`, `openAtLine`, `addTask`, `editTaskText`, `addSubtask`)
+  - Loads HTML/CSS/JS from `webview.html` template file (or `welcome.html` when no file is configured)
+  - Welcome wizard shown on first launch when `todoSidebar.activeFile` is not set
+  - Message handlers for webview-to-extension communication (`toggle`, `move`, `moveToParent`, `getColumns`, `openAtLine`, `addTask`, `editTaskText`, `addSubtask`, `selectFile`, `saveWizard`, `cancelWizard`)
   - File watchers to auto-refresh when the markdown file changes (set up only once to avoid duplicates)
   - Drag-and-drop supports precise positioning with 'top', 'bottom', and 'after' positions using `afterLine` parameter
 
@@ -57,6 +63,14 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
   - `editTaskTextInContent()` - Edit task text in place
   - `addSubtaskToParent()` - Add a subtask under a parent task
   - All functions preserve line ending style (CRLF vs LF) from the original file
+
+- **welcome.html** - Welcome wizard UI shown on first launch. Contains:
+  - File selection step (prompts user to select a markdown file)
+  - onDoneAction setting selection with descriptions of each option
+  - Tips section loaded from `tips.html` for easy editing
+  - Save/Cancel buttons to complete or skip setup
+
+- **tips.html** - Easily editable tips content shown in the welcome wizard. Can be customized to show different tips to users on first launch.
 
 ### Data Flow
 

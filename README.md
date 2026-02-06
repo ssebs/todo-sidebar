@@ -79,7 +79,6 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
 
 ## TODO
 
-- When you open the extension without any file saved, make it easy to pick a file
 - H3 sub categories
 - More MD features:
   - regular bullet items

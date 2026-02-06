@@ -1,4 +1,7 @@
 {
+    "todoSidebar.hiddenSections": ["This is a separate section."],
+    "todoSidebar.onDoneAction": "move",
+    "todoSidebar.activeFile": "./TODO.md",
   "files.exclude": {
     "**/test_hidden.txt": true
   }

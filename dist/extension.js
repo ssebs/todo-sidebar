@@ -154,7 +154,8 @@ class KanbanViewProvider {
             enableScripts: true,
             localResourceRoots: [this._context.extensionUri]
         };
-        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        // Don't set HTML here - let _refresh() handle it based on whether activeFile is set
+        // webviewView.webview.html will be set in the restoration logic or _refresh()
         // Handle visibility changes - refresh when panel becomes visible
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible && this._activeFileUri) {
@@ -211,6 +212,15 @@ class KanbanViewProvider {
                 case 'hideSection':
                     await this._handleHideSection(message.sectionTitle);
                     break;
+                case 'selectFile':
+                    await this._handleSelectFile();
+                    break;
+                case 'saveWizard':
+                    await this._handleSaveWizard(message.filePath, message.onDoneAction);
+                    break;
+                case 'cancelWizard':
+                    await this._handleCancelWizard();
+                    break;
             }
         });
         // Set up file watchers only once
@@ -241,9 +251,9 @@ class KanbanViewProvider {
                 console.error('Failed to restore saved file:', e);
             }
         }
-        // Always refresh when view becomes visible
+        // Always refresh when view becomes visible (this will show wizard or board)
+        this._refresh();
         if (this._activeFileUri) {
-            this._refresh();
             this._startPeriodicRefresh();
         }
     }
@@ -495,8 +505,18 @@ class KanbanViewProvider {
         }
     }
     async _refresh() {
-        if (!this._activeFileUri || !this._view) {
+        if (!this._view) {
             return;
+        }
+        // Show welcome wizard if no active file
+        if (!this._activeFileUri) {
+            this._view.webview.html = this._getWelcomeHtmlForWebview(this._view.webview);
+            return;
+        }
+        // Ensure the webview has the correct HTML template for the board
+        // (needed on first load when restoring from settings)
+        if (!this._view.webview.html.includes('id="content"')) {
+            this._view.webview.html = this._getHtmlForWebview(this._view.webview);
         }
         try {
             const text = await this._readActiveFile();
@@ -814,6 +834,152 @@ class KanbanViewProvider {
         html = html.replace(/\{\{cspSource\}\}/g, webview.cspSource);
         html = html.replace(/\{\{nonce\}\}/g, nonce);
         return html;
+    }
+    _getWelcomeHtmlForWebview(webview) {
+        const nonce = getNonce();
+        // Read the welcome wizard template
+        const welcomePath = path.join(this._context.extensionPath, 'src', 'welcome.html');
+        let html = fs.readFileSync(welcomePath, 'utf-8');
+        // Read the tips content
+        const tipsPath = path.join(this._context.extensionPath, 'src', 'tips.html');
+        const tipsContent = fs.readFileSync(tipsPath, 'utf-8');
+        // Replace placeholders
+        html = html.replace(/\{\{cspSource\}\}/g, webview.cspSource);
+        html = html.replace(/\{\{nonce\}\}/g, nonce);
+        html = html.replace(/\{\{TIPS_CONTENT\}\}/g, tipsContent);
+        return html;
+    }
+    async _handleSelectFile() {
+        const options = {
+            canSelectMany: false,
+            filters: {
+                'Markdown files': ['md', 'markdown']
+            },
+            title: 'Select a markdown file for your todo board'
+        };
+        const fileUri = await vscode.window.showOpenDialog(options);
+        if (fileUri && fileUri[0]) {
+            // Send the selected file path back to the webview
+            this._view?.webview.postMessage({
+                type: 'fileSelected',
+                filePath: fileUri[0].fsPath
+            });
+        }
+    }
+    async _handleSaveWizard(filePath, onDoneAction) {
+        try {
+            // Set the active file
+            const uri = vscode.Uri.file(filePath);
+            // Validate the file exists and is readable
+            try {
+                await vscode.workspace.fs.stat(uri);
+            }
+            catch {
+                this._view?.webview.postMessage({
+                    type: 'error',
+                    message: 'Selected file does not exist or is not accessible'
+                });
+                return;
+            }
+            // Save the settings to workspace
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                vscode.window.showWarningMessage('Please open a folder/workspace to save settings');
+                return;
+            }
+            const vscodeDir = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode');
+            const settingsPath = vscode.Uri.joinPath(vscodeDir, 'settings.json');
+            // Ensure .vscode directory exists
+            try {
+                await vscode.workspace.fs.stat(vscodeDir);
+            }
+            catch {
+                await vscode.workspace.fs.createDirectory(vscodeDir);
+            }
+            // Convert to relative path if within workspace
+            let savePath = filePath;
+            const relativePath = path.relative(workspaceFolder.uri.fsPath, filePath);
+            if (!relativePath.startsWith('..')) {
+                savePath = './' + relativePath.replace(/\\/g, '/');
+            }
+            // Read existing settings
+            let existingText = '';
+            let fileExists = false;
+            try {
+                const content = await vscode.workspace.fs.readFile(settingsPath);
+                existingText = Buffer.from(content).toString('utf-8');
+                fileExists = true;
+            }
+            catch (e) {
+                // File doesn't exist
+            }
+            // Create or update settings
+            const escapedPath = JSON.stringify(savePath);
+            const escapedAction = JSON.stringify(onDoneAction);
+            let newText;
+            if (!fileExists || existingText.trim() === '') {
+                // Create new settings file
+                newText = `{\n    "todoSidebar.activeFile": ${escapedPath},\n    "todoSidebar.onDoneAction": ${escapedAction}\n}`;
+            }
+            else {
+                // Update existing settings
+                const activeFilePattern = /"todoSidebar\.activeFile"\s*:\s*"[^"]*"/;
+                const onDoneActionPattern = /"todoSidebar\.onDoneAction"\s*:\s*"[^"]*"/;
+                const hasActiveFile = activeFilePattern.test(existingText);
+                const hasOnDoneAction = onDoneActionPattern.test(existingText);
+                newText = existingText;
+                if (hasActiveFile) {
+                    newText = newText.replace(activeFilePattern, `"todoSidebar.activeFile": ${escapedPath}`);
+                }
+                else {
+                    // Insert activeFile
+                    const insertMatch = newText.match(/^\s*\{/);
+                    if (insertMatch) {
+                        const insertPos = insertMatch[0].length;
+                        const before = newText.slice(0, insertPos);
+                        const after = newText.slice(insertPos);
+                        const needsComma = after.trim().length > 0 && after.trim() !== '}';
+                        newText = before + `\n    "todoSidebar.activeFile": ${escapedPath}${needsComma ? ',' : ''}` + after;
+                    }
+                }
+                if (hasOnDoneAction) {
+                    newText = newText.replace(onDoneActionPattern, `"todoSidebar.onDoneAction": ${escapedAction}`);
+                }
+                else {
+                    // Insert onDoneAction
+                    const insertMatch = newText.match(/^\s*\{/);
+                    if (insertMatch) {
+                        const insertPos = insertMatch[0].length;
+                        const before = newText.slice(0, insertPos);
+                        const after = newText.slice(insertPos);
+                        const needsComma = after.trim().length > 0 && after.trim() !== '}';
+                        newText = before + `\n    "todoSidebar.onDoneAction": ${escapedAction}${needsComma ? ',' : ''}` + after;
+                    }
+                }
+            }
+            await vscode.workspace.fs.writeFile(settingsPath, Buffer.from(newText, 'utf-8'));
+            // Set the active file and refresh to show the board
+            this._activeFileUri = uri;
+            // Clear history when switching files
+            this._historyStack = [];
+            this._historyIndex = -1;
+            // Update the webview to show the board
+            this._view.webview.html = this._getHtmlForWebview(this._view.webview);
+            await this._refresh();
+            this._startPeriodicRefresh();
+            vscode.window.showInformationMessage('Todo board setup complete!');
+        }
+        catch (error) {
+            console.error('Error saving wizard settings:', error);
+            this._view?.webview.postMessage({
+                type: 'error',
+                message: `Failed to save settings: ${error}`
+            });
+        }
+    }
+    async _handleCancelWizard() {
+        // User wants to skip the wizard - just close or show the "no file" message
+        vscode.window.showInformationMessage('You can open a markdown file anytime using the command "Todo Sidebar: Open Markdown File"');
     }
     dispose() {
         this._stopPeriodicRefresh();
