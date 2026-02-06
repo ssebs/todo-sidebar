@@ -336,7 +336,7 @@
               <button class="open-btn" data-line="${child.line}" title="Open in editor">↗</button>
             </div>
           </div>
-          ${grandchildren ? '<div class="children" data-parent-line="' + child.line + '">' + grandchildren + '</div>' : ''}
+          <div class="children" data-parent-line="${child.line}">${grandchildren}</div>
         </div>
       `;
     }

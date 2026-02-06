@@ -1033,10 +1033,49 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
     }
     return cleaned.join(lineEnding);
 }
+/**
+ * Helper function to check if a line is a descendant of another line
+ */
+function isDescendantOf(lines, descendantLine, ancestorLine) {
+    const ancestorIndex = ancestorLine - 1;
+    const descendantIndex = descendantLine - 1;
+    if (ancestorIndex < 0 || ancestorIndex >= lines.length) {
+        return false;
+    }
+    if (descendantIndex < 0 || descendantIndex >= lines.length) {
+        return false;
+    }
+    // Get the ancestor's indentation
+    const ancestorIndent = lines[ancestorIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
+    // Check all lines after the ancestor until we find a line at same or lower indentation
+    let i = ancestorIndex + 1;
+    while (i < lines.length) {
+        const currentLine = lines[i];
+        const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+        // If we hit a line at same/lower indentation, we've left the ancestor's descendants
+        if (currentLine.trim() !== '' && currentIndent <= ancestorIndent) {
+            break;
+        }
+        // If we found the descendant line, it's a descendant of ancestor
+        if (i === descendantIndex) {
+            return true;
+        }
+        i++;
+    }
+    return false;
+}
 function moveTaskToParent(content, taskLine, parentLine, position = 'bottom', afterLine) {
     const { lines, lineEnding } = parseContentLines(content);
     const taskIndex = taskLine - 1;
     const parentIndex = parentLine - 1;
+    // Prevent moving a task into itself
+    if (taskLine === parentLine) {
+        return content;
+    }
+    // Prevent creating circular references (moving a parent into its own descendant)
+    if (isDescendantOf(lines, parentLine, taskLine)) {
+        return content;
+    }
     // Get the task line content
     const taskContent = lines[taskIndex];
     if (!taskContent) {
