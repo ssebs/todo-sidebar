@@ -50,7 +50,6 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 ## TODO
 
-- Laggy over time - adding new tasks requires the pane to be closed & open again
 - Cleanup main file - split into:
   - filesystem
   - parser + file parsing code is regex hell

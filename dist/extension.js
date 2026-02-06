@@ -142,6 +142,9 @@ class KanbanViewProvider {
     _historyIndex = -1;
     _maxHistorySize = 50;
     _isUndoRedo = false;
+    // Periodic refresh timer
+    _periodicRefreshTimer;
+    _periodicRefreshInterval = 5000; // 5 seconds
     constructor(_context) {
         this._context = _context;
     }
@@ -156,6 +159,10 @@ class KanbanViewProvider {
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible && this._activeFileUri) {
                 this._refresh();
+                this._startPeriodicRefresh();
+            }
+            else {
+                this._stopPeriodicRefresh();
             }
         });
         // Handle messages from webview
@@ -234,6 +241,28 @@ class KanbanViewProvider {
         // Always refresh when view becomes visible
         if (this._activeFileUri) {
             this._refresh();
+            this._startPeriodicRefresh();
+        }
+    }
+    _startPeriodicRefresh() {
+        // Clear any existing timer
+        this._stopPeriodicRefresh();
+        // Only start if view is visible and a file is active
+        if (this._view?.visible && this._activeFileUri) {
+            this._periodicRefreshTimer = setInterval(() => {
+                if (this._view?.visible && this._activeFileUri) {
+                    this._refresh();
+                }
+                else {
+                    this._stopPeriodicRefresh();
+                }
+            }, this._periodicRefreshInterval);
+        }
+    }
+    _stopPeriodicRefresh() {
+        if (this._periodicRefreshTimer) {
+            clearInterval(this._periodicRefreshTimer);
+            this._periodicRefreshTimer = undefined;
         }
     }
     _setupFileWatchers() {
@@ -300,6 +329,8 @@ class KanbanViewProvider {
         // Clear history when switching files
         this._historyStack = [];
         this._historyIndex = -1;
+        // Restart periodic refresh with new file
+        this._stopPeriodicRefresh();
         // Store in workspace settings by directly writing to .vscode/settings.json
         try {
             const hasWorkspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
@@ -376,6 +407,7 @@ class KanbanViewProvider {
             vscode.window.showErrorMessage(`Failed to save todo file selection: ${e}`);
         }
         await this._refresh();
+        this._startPeriodicRefresh();
     }
     async refresh() {
         await this._refresh();
@@ -628,6 +660,7 @@ class KanbanViewProvider {
         return html;
     }
     dispose() {
+        this._stopPeriodicRefresh();
         for (const disposable of this._disposables) {
             disposable.dispose();
         }

@@ -19,6 +19,10 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   private _maxHistorySize: number = 50;
   private _isUndoRedo: boolean = false;
 
+  // Periodic refresh timer
+  private _periodicRefreshTimer?: NodeJS.Timeout;
+  private _periodicRefreshInterval: number = 5000; // 5 seconds
+
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
   public resolveWebviewView(
@@ -39,6 +43,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible && this._activeFileUri) {
         this._refresh();
+        this._startPeriodicRefresh();
+      } else {
+        this._stopPeriodicRefresh();
       }
     });
 
@@ -119,6 +126,30 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     // Always refresh when view becomes visible
     if (this._activeFileUri) {
       this._refresh();
+      this._startPeriodicRefresh();
+    }
+  }
+
+  private _startPeriodicRefresh() {
+    // Clear any existing timer
+    this._stopPeriodicRefresh();
+
+    // Only start if view is visible and a file is active
+    if (this._view?.visible && this._activeFileUri) {
+      this._periodicRefreshTimer = setInterval(() => {
+        if (this._view?.visible && this._activeFileUri) {
+          this._refresh();
+        } else {
+          this._stopPeriodicRefresh();
+        }
+      }, this._periodicRefreshInterval);
+    }
+  }
+
+  private _stopPeriodicRefresh() {
+    if (this._periodicRefreshTimer) {
+      clearInterval(this._periodicRefreshTimer);
+      this._periodicRefreshTimer = undefined;
     }
   }
 
@@ -199,6 +230,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     this._historyStack = [];
     this._historyIndex = -1;
 
+    // Restart periodic refresh with new file
+    this._stopPeriodicRefresh();
+
     // Store in workspace settings by directly writing to .vscode/settings.json
     try {
       const hasWorkspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
@@ -278,6 +312,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       vscode.window.showErrorMessage(`Failed to save todo file selection: ${e}`);
     }
     await this._refresh();
+    this._startPeriodicRefresh();
   }
 
   public async refresh() {
@@ -566,6 +601,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   }
 
   public dispose() {
+    this._stopPeriodicRefresh();
     for (const disposable of this._disposables) {
       disposable.dispose();
     }
