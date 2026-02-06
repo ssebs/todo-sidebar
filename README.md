@@ -48,14 +48,28 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
+## Configuration
+
+You can customize the behavior by adding settings to your workspace's `.vscode/settings.json`:
+
+```json
+{
+  "todoSidebar.activeFile": "./TODO.md",
+  "todoSidebar.onDoneAction": "move"
+}
+```
+
+### Available Settings
+
+- **todoSidebar.activeFile** (string): Path to the currently active markdown file for the todo board. Can be relative (e.g., `./TODO.md`) or absolute.
+
+- **todoSidebar.onDoneAction** (string: `"move"` | `"delete"`): Action to perform when a top-level task is marked as complete. Defaults to `"move"`.
+  - `"move"` (default): Toggles checkbox to `[x]` and moves task to Done column
+  - `"delete"`: Immediately deletes task and all its children. No confirmation dialog - use Ctrl+Z (Cmd+Z on Mac) to undo if needed.
+  - Note: Only affects top-level tasks. Subtasks always just toggle in place.
+
 ## TODO
 
-- New options in {workspace}/.vscode/settings.json
-  - todoSidebar.onDoneAction
-    - when a task is "completed" task L1 checkbox is checked
-    - choose whether to:
-      - move the task to the "done" category
-      - delete the task
 - option to hide h2 sections & save the name to the settings json as an array
   - Hide "done" category unless hovered / expanded
 - When you open the extension without any file saved, make it easy to pick a file

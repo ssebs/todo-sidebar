@@ -53,6 +53,13 @@
           "default": "",
           "description": "Path to the currently active markdown file for the todo board",
           "scope": "resource"
+        },
+        "todoSidebar.onDoneAction": {
+          "type": "string",
+          "enum": ["move", "delete"],
+          "default": "move",
+          "description": "Action to perform when a top-level task is marked as complete: 'move' to Done column or 'delete' entirely",
+          "scope": "resource"
         }
       }
     }

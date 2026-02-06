@@ -1,5 +1,6 @@
 {
   "todoSidebar.activeFile": "./TODO.md",
+  "todoSidebar.onDoneAction": "delete",
   "files.exclude": {
     "**/test_hidden.txt": true
   }

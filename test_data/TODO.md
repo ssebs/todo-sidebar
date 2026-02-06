@@ -4,8 +4,6 @@
 
 ## In Progress 🚀
 
-- [ ] New task
-
 ## Backlog 📋
 
 > This is a sub-description

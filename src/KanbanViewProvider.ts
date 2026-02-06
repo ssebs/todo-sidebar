@@ -419,24 +419,38 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       // Re-parse the board from fresh content to get accurate line numbers
       const currentBoard = parseMarkdown(text);
 
-      // Toggle the checkbox
-      text = toggleTaskInContent(text, line, checked);
-
       // Only move top-level tasks to Done column (not subtasks)
       const isTopLevel = this._isTopLevelTaskInBoard(line, currentBoard);
 
+      // Get the onDoneAction configuration
+      const config = vscode.workspace.getConfiguration('todoSidebar');
+      const onDoneAction = config.get<string>('onDoneAction', 'move');
+
       if (checked && isTopLevel) {
-        // If checked and top-level, move to Done column at TOP
-        const doneColumn = currentBoard.columns.find((c) => c.isDoneColumn);
-        if (doneColumn) {
-          const currentColumn = this._findTaskColumnInBoard(line, currentBoard);
-          if (currentColumn && !currentColumn.isDoneColumn) {
-            text = moveTaskInContent(text, line, doneColumn.title, 'top');
+        // Check configuration for what to do when a task is marked as done
+        if (onDoneAction === 'delete') {
+          // Delete the task and its children immediately without toggling
+          text = deleteTaskInContent(text, line);
+        } else {
+          // Default behavior: toggle checkbox and move to Done column
+          text = toggleTaskInContent(text, line, checked);
+
+          // Move to Done column at TOP
+          const doneColumn = currentBoard.columns.find((c) => c.isDoneColumn);
+          if (doneColumn) {
+            const currentColumn = this._findTaskColumnInBoard(line, currentBoard);
+            if (currentColumn && !currentColumn.isDoneColumn) {
+              text = moveTaskInContent(text, line, doneColumn.title, 'top');
+            }
           }
         }
       } else if (targetColumn && isTopLevel) {
         // If unchecked and a target column is specified, move there at TOP
+        text = toggleTaskInContent(text, line, checked);
         text = moveTaskInContent(text, line, targetColumn, 'top');
+      } else {
+        // For non-top-level tasks or other cases, just toggle the checkbox
+        text = toggleTaskInContent(text, line, checked);
       }
 
       await this._writeActiveFile(text);

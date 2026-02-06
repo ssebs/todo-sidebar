@@ -79,9 +79,18 @@ interface Board { title: string; description: string; columns: Column[]; }
 
 The selected markdown file path is persisted to `.vscode/settings.json` via the workspace configuration setting `todoSidebar.activeFile`. The file path is saved when a user selects a markdown file via the "Todo Sidebar: Open Markdown File" command, and is automatically restored when the extension loads or the panel becomes visible.
 
+### Configuration
+
+- **todoSidebar.activeFile** (string): Path to the currently active markdown file for the todo board. Stored in `.vscode/settings.json` and can be relative (e.g., `./README.md`) or absolute.
+
+- **todoSidebar.onDoneAction** (string: "move" | "delete"): Action to perform when a top-level task is marked as complete (checkbox checked). Defaults to "move".
+  - `"move"` (default): Toggles checkbox to `[x]` and moves task to Done column at top
+  - `"delete"`: Immediately deletes task and all its children without toggling checkbox. No confirmation dialog - relies on VSCode's undo (Ctrl+Z) for recovery.
+  - Only affects top-level tasks; subtasks always just toggle in place regardless of this setting.
+
 ### UI Features
 
-- **Toggle checkbox**: Click checkbox to toggle. Only top-level tasks move to Done column when checked; subtasks just toggle in place.
+- **Toggle checkbox**: Click checkbox to toggle. Behavior for top-level tasks depends on `todoSidebar.onDoneAction` setting: either move to Done column (default) or delete entirely. Subtasks always just toggle in place.
 - **Drag and drop**: Reorder tasks within columns, move between columns, or nest under parent tasks.
 - **Right-click to move**: Right-click a task to show a context menu for moving it to any section (moves to top of target section).
 - **Double-click to edit**: Double-click anywhere on a task box (not just the text) to enter inline edit mode.

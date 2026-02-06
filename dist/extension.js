@@ -497,23 +497,38 @@ class KanbanViewProvider {
             let text = await this._readActiveFile();
             // Re-parse the board from fresh content to get accurate line numbers
             const currentBoard = (0, parser_1.parseMarkdown)(text);
-            // Toggle the checkbox
-            text = (0, serializer_1.toggleTaskInContent)(text, line, checked);
             // Only move top-level tasks to Done column (not subtasks)
             const isTopLevel = this._isTopLevelTaskInBoard(line, currentBoard);
+            // Get the onDoneAction configuration
+            const config = vscode.workspace.getConfiguration('todoSidebar');
+            const onDoneAction = config.get('onDoneAction', 'move');
             if (checked && isTopLevel) {
-                // If checked and top-level, move to Done column at TOP
-                const doneColumn = currentBoard.columns.find((c) => c.isDoneColumn);
-                if (doneColumn) {
-                    const currentColumn = this._findTaskColumnInBoard(line, currentBoard);
-                    if (currentColumn && !currentColumn.isDoneColumn) {
-                        text = (0, serializer_1.moveTaskInContent)(text, line, doneColumn.title, 'top');
+                // Check configuration for what to do when a task is marked as done
+                if (onDoneAction === 'delete') {
+                    // Delete the task and its children immediately without toggling
+                    text = (0, serializer_1.deleteTaskInContent)(text, line);
+                }
+                else {
+                    // Default behavior: toggle checkbox and move to Done column
+                    text = (0, serializer_1.toggleTaskInContent)(text, line, checked);
+                    // Move to Done column at TOP
+                    const doneColumn = currentBoard.columns.find((c) => c.isDoneColumn);
+                    if (doneColumn) {
+                        const currentColumn = this._findTaskColumnInBoard(line, currentBoard);
+                        if (currentColumn && !currentColumn.isDoneColumn) {
+                            text = (0, serializer_1.moveTaskInContent)(text, line, doneColumn.title, 'top');
+                        }
                     }
                 }
             }
             else if (targetColumn && isTopLevel) {
                 // If unchecked and a target column is specified, move there at TOP
+                text = (0, serializer_1.toggleTaskInContent)(text, line, checked);
                 text = (0, serializer_1.moveTaskInContent)(text, line, targetColumn, 'top');
+            }
+            else {
+                // For non-top-level tasks or other cases, just toggle the checkbox
+                text = (0, serializer_1.toggleTaskInContent)(text, line, checked);
             }
             await this._writeActiveFile(text);
         }
