@@ -49,6 +49,8 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 ![Usage vid](https://raw.githubusercontent.com/ssebs/todo-sidebar/main/img/usage.webp)
 
 ## TODO
+
+- Laggy over time - adding new tasks requires the pane to be closed & open again
 - Cleanup main file - split into:
   - filesystem
   - parser + file parsing code is regex hell
@@ -74,6 +76,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
   - [ ] Subtask 2
 
 ## Backlog
+
 > This is a sub-description
 
 - [ ] Task 3
