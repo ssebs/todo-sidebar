@@ -145,6 +145,11 @@ class KanbanViewProvider {
     // Periodic refresh timer
     _periodicRefreshTimer;
     _periodicRefreshInterval = 5000; // 5 seconds
+    // Debounce timer for refresh
+    _refreshDebounceTimer;
+    _refreshDebounceMs = 100; // Debounce refresh calls by 100ms
+    // Track if webview is in edit mode (to skip refreshes)
+    _isEditing = false;
     constructor(_context) {
         this._context = _context;
     }
@@ -211,6 +216,12 @@ class KanbanViewProvider {
                     break;
                 case 'hideSection':
                     await this._handleHideSection(message.sectionTitle);
+                    break;
+                case 'editStart':
+                    this._isEditing = true;
+                    break;
+                case 'editEnd':
+                    this._isEditing = false;
                     break;
                 case 'selectFile':
                     await this._handleSelectFile();
@@ -279,17 +290,17 @@ class KanbanViewProvider {
         }
     }
     _setupFileWatchers() {
-        // Watch for text document changes
+        // Watch for text document changes - use debounced refresh to avoid rapid re-renders
         this._disposables.push(vscode.workspace.onDidChangeTextDocument((e) => {
             if (this._activeFileUri && e.document.uri.toString() === this._activeFileUri.toString()) {
-                this._refresh();
+                this._debouncedRefresh();
             }
         }));
-        // Watch for file system changes
+        // Watch for file system changes - use debounced refresh
         const watcher = vscode.workspace.createFileSystemWatcher('**/*.md');
         this._disposables.push(watcher.onDidChange((uri) => {
             if (this._activeFileUri && uri.toString() === this._activeFileUri.toString()) {
-                this._refresh();
+                this._debouncedRefresh();
             }
         }));
         this._disposables.push(watcher);
@@ -504,8 +515,12 @@ class KanbanViewProvider {
             this._isUndoRedo = false;
         }
     }
-    async _refresh() {
+    async _refresh(force = false) {
         if (!this._view) {
+            return;
+        }
+        // Skip refresh if user is actively editing (unless forced or there's a pending edit line)
+        if (this._isEditing && !force && !this._pendingEditLine) {
             return;
         }
         // Show welcome wizard if no active file
@@ -540,6 +555,18 @@ class KanbanViewProvider {
         catch (error) {
             console.error('Error refreshing kanban board:', error);
         }
+    }
+    /**
+     * Debounced refresh - prevents rapid re-renders from file watcher events
+     */
+    _debouncedRefresh() {
+        if (this._refreshDebounceTimer) {
+            clearTimeout(this._refreshDebounceTimer);
+        }
+        this._refreshDebounceTimer = setTimeout(() => {
+            this._refreshDebounceTimer = undefined;
+            this._refresh();
+        }, this._refreshDebounceMs);
     }
     async _handleToggle(line, checked, targetColumn) {
         if (!this._activeFileUri) {
@@ -705,6 +732,8 @@ class KanbanViewProvider {
             if (result.line > 0) {
                 this._pendingEditLine = result.line;
                 await this._writeActiveFile(result.content);
+                // Force immediate refresh to enter edit mode, don't wait for debounced file watcher
+                await this._refresh(true);
             }
         }
         catch (error) {
@@ -734,6 +763,8 @@ class KanbanViewProvider {
             if (result.line > 0) {
                 this._pendingEditLine = result.line;
                 await this._writeActiveFile(result.content);
+                // Force immediate refresh to enter edit mode, don't wait for debounced file watcher
+                await this._refresh(true);
             }
         }
         catch (error) {
@@ -983,6 +1014,9 @@ class KanbanViewProvider {
     }
     dispose() {
         this._stopPeriodicRefresh();
+        if (this._refreshDebounceTimer) {
+            clearTimeout(this._refreshDebounceTimer);
+        }
         for (const disposable of this._disposables) {
             disposable.dispose();
         }

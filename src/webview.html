@@ -591,6 +591,9 @@
       const line = parseInt(taskElement.dataset.line);
       const originalText = textSpan.textContent;
 
+      // Notify extension we're in edit mode (to pause refreshes)
+      vscode.postMessage({ type: 'editStart' });
+
       const input = document.createElement('input');
       input.type = 'text';
       input.className = 'task-edit-input';
@@ -630,6 +633,9 @@
       const newText = input.value.trim();
       const originalText = input.dataset.originalText;
 
+      // Notify extension we're done editing
+      vscode.postMessage({ type: 'editEnd' });
+
       if (newText && newText !== originalText) {
         vscode.postMessage({ type: 'editTaskText', line, newText });
       }
@@ -639,6 +645,8 @@
 
     function cancelEdit(input) {
       const originalText = input.dataset.originalText;
+      // Notify extension we're done editing
+      vscode.postMessage({ type: 'editEnd' });
       restoreTextSpan(input, originalText);
     }
 
