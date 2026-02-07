@@ -80,7 +80,12 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
   - **Quick hide:** Right-click any section header to hide it instantly
 
 ## TODO
-
+- Laggy still!
+  - After having sidebar open with large file for a while
+  - e.g. add new task will create the task, but its not immediately editable
+  - Checking off a task wont move it to the done section, at least until i reload the web view.
+  - the web view should refresh when it gains focus (mouse clicks in that area)
+- When editing a newly created task, i cant type anything. it loses focus. if i double click to edit then i can type it
 - H3 sub categories
 - More MD features:
   - regular bullet items

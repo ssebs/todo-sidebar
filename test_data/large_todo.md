@@ -1,0 +1,167 @@
+# TODO
+
+> This has been copied from DankNooner, which has some lag issues when using this extension
+
+## In Progress 🚀
+
+- [ ] Create Player Part 1
+  - > no animations for now
+  - [ ] Singleplayer / Multiplayer code separation
+  - [ ] Player scene + component scripts
+    - > See moto-player-controller
+    - [ ] physics
+    - [ ] movement
+    - [ ] gearing
+  - [ ] basic character selection (select male/female)
+  - [x] basic bike selection (select bike)
+  - [ ] InputManager in game
+    - [ ] camera control
+    - [ ] bike control
+- [ ] Create Test Level - Gym - player controller, with tp. Basically in game documentation.
+  - (E.g. How far can you jump)
+
+## Up Next 📋
+
+- [ ] Create NetworkManager
+  - [ ] Create lobby
+    - [ ] Web RTC if possible for web export?
+    - [ ] players can join / be seen
+    - [ ] text chat
+  - [ ] plan MP authority
+    - [ ] only host can start game
+    - [ ] host chooses level, others can see
+  - [ ] refactor if needed
+- [ ] Create SpawnManager
+  - [ ] spawn players in game
+    - [ ] Should show their customizations
+  - [ ] sync player positions
+  - [ ] sync animations (tricks)
+
+- [ ] Create Player Part 2
+  - [ ] IK https://youtu.be/MbaPDWfbNLo?si=p5ybcrLUJje_nBgd animations
+  - [ ] **Basic customization**
+    - [ ] character accessories (cosmetics, etc.)
+    - [ ] bike mods (color, actual mods) (**basic customization**)
+
+- [ ] Trick Manager + tricks
+  - [ ] trick system
+  - [ ] wheelie / stoppie tricks
+  - [ ] ramp tricks
+  - [ ] ground tricks
+- [ ] Create Test Level - Zoo - all relevant models/scenes in 3d space to easily compare
+  - (E.g. diff bikes/mods on each bike)
+  - There's a godot plugin for this
+  - https://binbun3d.itch.io/godot-ultimate-toon-shader
+
+## Backlog
+
+- [ ] Create TrickManager
+  - [ ] connect w/ NetworkManager
+  - [ ] trick detection in player component
+  - [ ] trick scoring in own script
+- [ ] Create Save System
+- [ ] Create GamemodeManager
+  - [ ] free roam w/ friends
+  - [ ] race
+- [ ] Create basic SettingsMenu scene/ui
+
+  - [ ] Make this work with pause menu (compose this somehow)
+
+  - [x] Create scene
+  - [x] Improve the UI
+  - [ ] Add all components
+  - [ ] Functional settings
+
+- [ ] Customization
+
+  - [ ] Add customize menu UI
+  - [ ] Add customize menu background scene
+  - [ ] More Character customization
+  - [ ] More Bike customization
+  - [ ] Save on client for now - but make abstract enough for future server saving
+
+- [ ] Create Test Level - Museum - functionally show how systems work, text explaining the systems.
+  - (E.g. showing physics demos, how scripted sequences work)
+- [ ] Create Island Level
+  - [ ] render trees/etc. with multi mesh
+
+## Polish / Bugs
+
+- [ ] Setup cloudflare image upload in vscode
+- [ ] Quit on Web should just escape fullscreen
+- [ ] Add transition animations (e.g. circle in/out) between Menu States / Loading states
+
+## Done ✅
+
+- [x] format on save
+
+- [x] Move planning docs to v2 folder (also update README.md)
+
+- [x] mouse capture broken
+
+- [x] Git LFS
+
+- [x] Create basic PauseMenu scene/ui
+
+  - [x] Create scene/script
+  - [x] Option to go back to main menu
+  - [x] Pause / resume functionality
+
+- [x] Create InputManager
+
+  - [x] Mouse / Gamepad switching
+  - [x] Gamepad to control Menus
+  - [x] Show/Hide the cursor
+
+- [x] Connect signals between all managers in ManagerManager
+
+- [x] Create LevelManager
+
+  - [x] base class / states
+  - [x] Move BGClear Rect as a level type
+  - [x] create first 3d test level
+  - [x] auto validation
+  - [x] Make level select work
+  - [x] Update Architecture.md
+
+- [x] Add toast UI
+
+- [x] Finish UI routing
+
+  - [x] Pass params to states via context
+  - [x] nav to lobby / level select depending on which button you choose
+  - [x] connect all the buttons
+
+- [x] Create basic LobbyMenu scene/ui
+
+  - [x] Create scene
+  - [x] Improve the UI
+  - [x] Add all components
+
+- [x] Create basic PlayMenu scene/ui
+
+  - [x] Create scene / ui
+  - [x] create all components (see excalidraw)
+
+- [x] PrimaryBtn style
+
+- [x] create menu uidiagram
+
+- [x] Create UI Theme
+
+- [x] Create basic MainMenu scene/ui
+
+  - [x] Create scene
+  - [x] Improve the UI
+
+- [x] Fix Menu HACKS / Cleanup
+  - [x] Update Architecture doc w/ final setup
+- [x] Create MenuManager
+- [x] Navigate between Menus
+- [x] Basic Localization
+- [x] Create ManagerManager
+- [x] Create StateMachine
+- [x] Update project plan
+- [x] Create godot 4.6 project
+- [x] Create folder structure
+- [x] Create planning docs
