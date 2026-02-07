@@ -141,6 +141,7 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
 - Update version in [package.json](./package.json) (e.g. "0.0.3")
 - `vsce package`
 - `export v='v0.0.4'; git add -A; git commit -m "$v release"; git push; git tag $v; git push origin $v;`
+  - PS: `$v = "v0.0.4"; git add -A; git commit -m "$v release"; git push; git tag $v; git push origin $v`
 - [Github Actions](./.github/workflows/main.yml) are configured to build & publish when a new tag is created, so on sucess it will auto publish
   - These use auth token repo secrets to push to both extension galleries.
 
