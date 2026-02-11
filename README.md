@@ -80,6 +80,7 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
   - **Quick hide:** Right-click any section header to hide it instantly
 
 ## TODO
+- Moving items with subitems does not move all children
 - H3 sub categories
 - More MD features:
   - regular bullet items
