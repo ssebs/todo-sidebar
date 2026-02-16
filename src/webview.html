@@ -748,6 +748,58 @@
         });
       });
 
+      // Track pending drag operations to prevent duplicate events
+      let lastDragOperation = null;
+
+      function handleDragEnd(evt, source) {
+        const taskLine = parseInt(evt.item.dataset.line);
+        const targetSection = evt.to.dataset.section;
+        const targetParentLine = evt.to.dataset.parentLine;
+        const newIndex = evt.newIndex;
+
+        // Create a unique key for this operation
+        const opKey = `${taskLine}-${targetSection || ''}-${targetParentLine || ''}-${newIndex}`;
+
+        // Skip if this is a duplicate event (can happen with nested sortables)
+        if (lastDragOperation === opKey) {
+          console.log(`[${source}] Skipping duplicate drag operation:`, opKey);
+          return;
+        }
+        lastDragOperation = opKey;
+
+        // Clear after a short delay to allow new operations
+        setTimeout(() => {
+          if (lastDragOperation === opKey) lastDragOperation = null;
+        }, 100);
+
+        console.log(`[${source}]`, { taskLine, targetSection, targetParentLine, newIndex, from: evt.from.className, to: evt.to.className });
+
+        if (targetParentLine) {
+          // Dropped into a parent task's children area
+          const prevSibling = evt.item.previousElementSibling;
+          const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
+          console.log(`[${source}] moveToParent`, { taskLine, parentLine: parseInt(targetParentLine), position: newIndex === 0 ? 'top' : 'after', afterLine });
+          vscode.postMessage({
+            type: 'moveToParent',
+            taskLine,
+            parentLine: parseInt(targetParentLine),
+            position: newIndex === 0 ? 'top' : 'after',
+            afterLine
+          });
+        } else if (targetSection) {
+          // Dropped into a column
+          const prevSibling = evt.item.previousElementSibling;
+          if (newIndex === 0 || !prevSibling) {
+            console.log(`[${source}] move top`, { taskLine, targetSection });
+            vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+          } else {
+            const afterLine = parseInt(prevSibling.dataset.line);
+            console.log(`[${source}] move after`, { taskLine, targetSection, afterLine });
+            vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
+          }
+        }
+      }
+
       // SortableJS for column-level tasks
       document.querySelectorAll('.tasks').forEach(taskList => {
         new Sortable(taskList, {
@@ -756,34 +808,7 @@
           ghostClass: 'task-ghost',
           chosenClass: 'task-chosen',
           dragClass: 'task-drag',
-          onEnd: (evt) => {
-            const taskLine = parseInt(evt.item.dataset.line);
-            const targetSection = evt.to.dataset.section;
-            const targetParentLine = evt.to.dataset.parentLine;
-            const newIndex = evt.newIndex;
-
-            if (targetParentLine) {
-              // Dropped into a parent task's children area
-              const prevSibling = evt.item.previousElementSibling;
-              const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
-              vscode.postMessage({
-                type: 'moveToParent',
-                taskLine,
-                parentLine: parseInt(targetParentLine),
-                position: newIndex === 0 ? 'top' : 'after',
-                afterLine
-              });
-            } else if (targetSection) {
-              // Dropped into a column - find what we're after
-              const prevSibling = evt.item.previousElementSibling;
-              if (newIndex === 0 || !prevSibling) {
-                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
-              } else {
-                const afterLine = parseInt(prevSibling.dataset.line);
-                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
-              }
-            }
-          }
+          onEnd: (evt) => handleDragEnd(evt, 'tasks')
         });
       });
 
@@ -795,34 +820,7 @@
           ghostClass: 'task-ghost',
           chosenClass: 'task-chosen',
           dragClass: 'task-drag',
-          onEnd: (evt) => {
-            const taskLine = parseInt(evt.item.dataset.line);
-            const targetSection = evt.to.dataset.section;
-            const targetParentLine = evt.to.dataset.parentLine;
-            const newIndex = evt.newIndex;
-
-            if (targetParentLine) {
-              // Dropped into a parent task's children area
-              const prevSibling = evt.item.previousElementSibling;
-              const afterLine = prevSibling ? parseInt(prevSibling.dataset.line) : undefined;
-              vscode.postMessage({
-                type: 'moveToParent',
-                taskLine,
-                parentLine: parseInt(targetParentLine),
-                position: newIndex === 0 ? 'top' : 'after',
-                afterLine
-              });
-            } else if (targetSection) {
-              // Promoted to column level (dragged out of parent)
-              const prevSibling = evt.item.previousElementSibling;
-              if (newIndex === 0 || !prevSibling) {
-                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
-              } else {
-                const afterLine = parseInt(prevSibling.dataset.line);
-                vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine });
-              }
-            }
-          }
+          onEnd: (evt) => handleDragEnd(evt, 'children')
         });
       });
     }

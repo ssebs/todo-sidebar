@@ -6,7 +6,7 @@
 
 - [ ] Create Player Part 1
   - > no animations for now
-  - [ ] Singleplayer / Multiplayer code separation
+  - [x] Singleplayer / Multiplayer code separation
   - [ ] Player scene + component scripts
     - > See moto-player-controller
     - [ ] physics
@@ -23,7 +23,9 @@
 ## Up Next 📋
 
 - [ ] Create NetworkManager
+
   - [ ] Create lobby
+
     - [ ] Web RTC if possible for web export?
     - [ ] players can join / be seen
     - [ ] text chat

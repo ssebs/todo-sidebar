@@ -30,6 +30,13 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   // Track if webview is in edit mode (to skip refreshes)
   private _isEditing: boolean = false;
 
+  // Mutex to prevent concurrent file modifications
+  private _isWriting: boolean = false;
+  private _writeQueue: (() => Promise<void>)[] = [];
+
+  // Flag to ignore file watcher events during our own writes
+  private _ignoreNextFileChange: boolean = false;
+
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
   public resolveWebviewView(
@@ -184,6 +191,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     this._disposables.push(
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (this._activeFileUri && e.document.uri.toString() === this._activeFileUri.toString()) {
+          // Skip if we triggered this change ourselves
+          if (this._ignoreNextFileChange) {
+            this._ignoreNextFileChange = false;
+            return;
+          }
           this._debouncedRefresh();
         }
       })
@@ -194,6 +206,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     this._disposables.push(
       watcher.onDidChange((uri) => {
         if (this._activeFileUri && uri.toString() === this._activeFileUri.toString()) {
+          // Skip if we triggered this change ourselves
+          if (this._ignoreNextFileChange) {
+            this._ignoreNextFileChange = false;
+            return;
+          }
           this._debouncedRefresh();
         }
       })
@@ -382,25 +399,54 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    // Track history for undo/redo (skip if this is an undo/redo operation)
-    if (!this._isUndoRedo) {
-      // If we're not at the end of the stack, truncate forward history
-      if (this._historyIndex < this._historyStack.length - 1) {
-        this._historyStack = this._historyStack.slice(0, this._historyIndex + 1);
-      }
+    // Use a queue to serialize write operations
+    return new Promise((resolve) => {
+      const writeOp = async () => {
+        // Track history for undo/redo (skip if this is an undo/redo operation)
+        if (!this._isUndoRedo) {
+          // If we're not at the end of the stack, truncate forward history
+          if (this._historyIndex < this._historyStack.length - 1) {
+            this._historyStack = this._historyStack.slice(0, this._historyIndex + 1);
+          }
 
-      // Add current state to history
-      this._historyStack.push(text);
+          // Add current state to history
+          this._historyStack.push(text);
 
-      // Limit history size
-      if (this._historyStack.length > this._maxHistorySize) {
-        this._historyStack.shift();
+          // Limit history size
+          if (this._historyStack.length > this._maxHistorySize) {
+            this._historyStack.shift();
+          } else {
+            this._historyIndex++;
+          }
+        }
+
+        // Set flag to ignore the file watcher event we're about to trigger
+        this._ignoreNextFileChange = true;
+        await vscode.workspace.fs.writeFile(this._activeFileUri!, Buffer.from(text, 'utf-8'));
+        resolve();
+      };
+
+      if (this._isWriting) {
+        // Queue the operation
+        this._writeQueue.push(writeOp);
       } else {
-        this._historyIndex++;
+        // Execute immediately and process queue
+        this._isWriting = true;
+        writeOp().finally(() => {
+          this._processWriteQueue();
+        });
       }
-    }
+    });
+  }
 
-    await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+  private async _processWriteQueue(): Promise<void> {
+    const nextOp = this._writeQueue.shift();
+    if (nextOp) {
+      await nextOp();
+      await this._processWriteQueue();
+    } else {
+      this._isWriting = false;
+    }
   }
 
   private async _handleUndo() {
@@ -628,8 +674,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
+      console.log('[_handleMove]', { taskLine, targetSection, position, afterLine });
       let text = await this._readActiveFile();
+      console.log('[_handleMove] before:', text.split('\n').map((l, i) => `${i+1}: ${l}`).join('\n'));
       text = moveTaskInContent(text, taskLine, targetSection, position, afterLine);
+      console.log('[_handleMove] after:', text.split('\n').map((l, i) => `${i+1}: ${l}`).join('\n'));
       await this._writeActiveFile(text);
     } catch (error) {
       console.error('Error moving task:', error);
@@ -642,8 +691,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
+      console.log('[_handleMoveToParent]', { taskLine, parentLine, position, afterLine });
       let text = await this._readActiveFile();
+      console.log('[_handleMoveToParent] before:', text.split('\n').map((l, i) => `${i+1}: ${l}`).join('\n'));
       text = moveTaskToParent(text, taskLine, parentLine, position, afterLine);
+      console.log('[_handleMoveToParent] after:', text.split('\n').map((l, i) => `${i+1}: ${l}`).join('\n'));
       await this._writeActiveFile(text);
     } catch (error) {
       console.error('Error moving task to parent:', error);

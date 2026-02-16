@@ -150,6 +150,11 @@ class KanbanViewProvider {
     _refreshDebounceMs = 100; // Debounce refresh calls by 100ms
     // Track if webview is in edit mode (to skip refreshes)
     _isEditing = false;
+    // Mutex to prevent concurrent file modifications
+    _isWriting = false;
+    _writeQueue = [];
+    // Flag to ignore file watcher events during our own writes
+    _ignoreNextFileChange = false;
     constructor(_context) {
         this._context = _context;
     }
@@ -293,6 +298,11 @@ class KanbanViewProvider {
         // Watch for text document changes - use debounced refresh to avoid rapid re-renders
         this._disposables.push(vscode.workspace.onDidChangeTextDocument((e) => {
             if (this._activeFileUri && e.document.uri.toString() === this._activeFileUri.toString()) {
+                // Skip if we triggered this change ourselves
+                if (this._ignoreNextFileChange) {
+                    this._ignoreNextFileChange = false;
+                    return;
+                }
                 this._debouncedRefresh();
             }
         }));
@@ -300,6 +310,11 @@ class KanbanViewProvider {
         const watcher = vscode.workspace.createFileSystemWatcher('**/*.md');
         this._disposables.push(watcher.onDidChange((uri) => {
             if (this._activeFileUri && uri.toString() === this._activeFileUri.toString()) {
+                // Skip if we triggered this change ourselves
+                if (this._ignoreNextFileChange) {
+                    this._ignoreNextFileChange = false;
+                    return;
+                }
                 this._debouncedRefresh();
             }
         }));
@@ -469,23 +484,52 @@ class KanbanViewProvider {
         if (!this._activeFileUri) {
             return;
         }
-        // Track history for undo/redo (skip if this is an undo/redo operation)
-        if (!this._isUndoRedo) {
-            // If we're not at the end of the stack, truncate forward history
-            if (this._historyIndex < this._historyStack.length - 1) {
-                this._historyStack = this._historyStack.slice(0, this._historyIndex + 1);
-            }
-            // Add current state to history
-            this._historyStack.push(text);
-            // Limit history size
-            if (this._historyStack.length > this._maxHistorySize) {
-                this._historyStack.shift();
+        // Use a queue to serialize write operations
+        return new Promise((resolve) => {
+            const writeOp = async () => {
+                // Track history for undo/redo (skip if this is an undo/redo operation)
+                if (!this._isUndoRedo) {
+                    // If we're not at the end of the stack, truncate forward history
+                    if (this._historyIndex < this._historyStack.length - 1) {
+                        this._historyStack = this._historyStack.slice(0, this._historyIndex + 1);
+                    }
+                    // Add current state to history
+                    this._historyStack.push(text);
+                    // Limit history size
+                    if (this._historyStack.length > this._maxHistorySize) {
+                        this._historyStack.shift();
+                    }
+                    else {
+                        this._historyIndex++;
+                    }
+                }
+                // Set flag to ignore the file watcher event we're about to trigger
+                this._ignoreNextFileChange = true;
+                await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+                resolve();
+            };
+            if (this._isWriting) {
+                // Queue the operation
+                this._writeQueue.push(writeOp);
             }
             else {
-                this._historyIndex++;
+                // Execute immediately and process queue
+                this._isWriting = true;
+                writeOp().finally(() => {
+                    this._processWriteQueue();
+                });
             }
+        });
+    }
+    async _processWriteQueue() {
+        const nextOp = this._writeQueue.shift();
+        if (nextOp) {
+            await nextOp();
+            await this._processWriteQueue();
         }
-        await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(text, 'utf-8'));
+        else {
+            this._isWriting = false;
+        }
     }
     async _handleUndo() {
         if (this._historyIndex <= 0 || !this._activeFileUri) {
@@ -686,8 +730,11 @@ class KanbanViewProvider {
             return;
         }
         try {
+            console.log('[_handleMove]', { taskLine, targetSection, position, afterLine });
             let text = await this._readActiveFile();
+            console.log('[_handleMove] before:', text.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
             text = (0, serializer_1.moveTaskInContent)(text, taskLine, targetSection, position, afterLine);
+            console.log('[_handleMove] after:', text.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
             await this._writeActiveFile(text);
         }
         catch (error) {
@@ -699,8 +746,11 @@ class KanbanViewProvider {
             return;
         }
         try {
+            console.log('[_handleMoveToParent]', { taskLine, parentLine, position, afterLine });
             let text = await this._readActiveFile();
+            console.log('[_handleMoveToParent] before:', text.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
             text = (0, serializer_1.moveTaskToParent)(text, taskLine, parentLine, position, afterLine);
+            console.log('[_handleMoveToParent] after:', text.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
             await this._writeActiveFile(text);
         }
         catch (error) {
@@ -1285,15 +1335,34 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
     // Add the task line
     taskLines.push(lines[lineIndex]);
     // Add all children (lines with greater indentation following the task)
+    // Empty lines are included if followed by more children at greater indentation
     let i = lineIndex + 1;
     while (i < lines.length) {
         const currentLine = lines[i];
         const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
-        // Empty line or line with content at same/less indentation ends the block
+        // Empty lines: look ahead to see if more children follow
         if (currentLine.trim() === '') {
+            // Look ahead for next non-empty line
+            let lookAhead = i + 1;
+            while (lookAhead < lines.length && lines[lookAhead].trim() === '') {
+                lookAhead++;
+            }
+            // If next non-empty line is still indented more than task, include the empty lines
+            if (lookAhead < lines.length) {
+                const nextIndent = lines[lookAhead].match(INDENT_REGEX)?.[1].length ?? 0;
+                if (nextIndent > taskIndent) {
+                    // Include all empty lines up to the next content
+                    while (i < lookAhead) {
+                        taskLines.push(lines[i]);
+                        i++;
+                    }
+                    continue;
+                }
+            }
+            // Otherwise, empty line ends the block
             break;
         }
-        if (currentIndent <= taskIndent && currentLine.trim() !== '') {
+        if (currentIndent <= taskIndent) {
             break;
         }
         taskLines.push(currentLine);
@@ -1325,9 +1394,15 @@ function moveTaskInContent(content, taskLine, targetSectionTitle, position = 'bo
             const sectionTitle = sectionMatch[1].trim();
             if (sectionTitle === targetSectionTitle || sectionTitle.startsWith(targetSectionTitle)) {
                 if (position === 'top') {
-                    // Insert right after the section header (skip empty lines)
+                    // Insert right after the section header and any description
+                    // Skip only description quotes, not empty lines (we'll insert before existing content)
                     let insertAfterHeader = j + 1;
-                    while (insertAfterHeader < newLines.length && newLines[insertAfterHeader].trim() === '') {
+                    // Skip description lines (> ...)
+                    while (insertAfterHeader < newLines.length && newLines[insertAfterHeader].match(/^>\s*/)) {
+                        insertAfterHeader++;
+                    }
+                    // Skip at most one empty line after header/description
+                    if (insertAfterHeader < newLines.length && newLines[insertAfterHeader].trim() === '') {
                         insertAfterHeader++;
                     }
                     targetInsertIndex = insertAfterHeader;
@@ -1457,14 +1532,34 @@ function moveTaskToParent(content, taskLine, parentLine, position = 'bottom', af
     // The task itself, re-indented as a child
     taskLines.push(`${childIndent}- ${checkboxPart} ${taskText}`);
     // Find and re-indent any children of the moved task
+    // Empty lines are included if followed by more children at greater indentation
     let i = taskIndex + 1;
     while (i < lines.length) {
         const currentLine = lines[i];
         const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
+        // Empty lines: look ahead to see if more children follow
         if (currentLine.trim() === '') {
+            // Look ahead for next non-empty line
+            let lookAhead = i + 1;
+            while (lookAhead < lines.length && lines[lookAhead].trim() === '') {
+                lookAhead++;
+            }
+            // If next non-empty line is still indented more than task, include the empty lines
+            if (lookAhead < lines.length) {
+                const nextIndent = lines[lookAhead].match(INDENT_REGEX)?.[1].length ?? 0;
+                if (nextIndent > originalTaskIndent) {
+                    // Include all empty lines (they stay empty, just included in the block)
+                    while (i < lookAhead) {
+                        taskLines.push('');
+                        i++;
+                    }
+                    continue;
+                }
+            }
+            // Otherwise, empty line ends the block
             break;
         }
-        if (currentIndent <= originalTaskIndent && currentLine.trim() !== '') {
+        if (currentIndent <= originalTaskIndent) {
             break;
         }
         // Re-indent the child line
@@ -1662,16 +1757,33 @@ function deleteTaskInContent(content, taskLine) {
     // Find the task and all its children (indented lines below it)
     const taskIndent = lines[lineIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
     // Count lines to remove (task + all children)
+    // Empty lines are included if followed by more children at greater indentation
     let linesToRemove = 1;
     let i = lineIndex + 1;
     while (i < lines.length) {
         const currentLine = lines[i];
         const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
-        // Empty line or line with content at same/less indentation ends the block
+        // Empty lines: look ahead to see if more children follow
         if (currentLine.trim() === '') {
+            // Look ahead for next non-empty line
+            let lookAhead = i + 1;
+            while (lookAhead < lines.length && lines[lookAhead].trim() === '') {
+                lookAhead++;
+            }
+            // If next non-empty line is still indented more than task, include the empty lines
+            if (lookAhead < lines.length) {
+                const nextIndent = lines[lookAhead].match(INDENT_REGEX)?.[1].length ?? 0;
+                if (nextIndent > taskIndent) {
+                    // Include all empty lines
+                    linesToRemove += lookAhead - i;
+                    i = lookAhead;
+                    continue;
+                }
+            }
+            // Otherwise, empty line ends the block
             break;
         }
-        if (currentIndent <= taskIndent && currentLine.trim() !== '') {
+        if (currentIndent <= taskIndent) {
             break;
         }
         linesToRemove++;

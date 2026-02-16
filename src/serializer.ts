@@ -60,16 +60,35 @@ export function moveTaskInContent(
   taskLines.push(lines[lineIndex]);
 
   // Add all children (lines with greater indentation following the task)
+  // Empty lines are included if followed by more children at greater indentation
   let i = lineIndex + 1;
   while (i < lines.length) {
     const currentLine = lines[i];
     const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
 
-    // Empty line or line with content at same/less indentation ends the block
+    // Empty lines: look ahead to see if more children follow
     if (currentLine.trim() === '') {
+      // Look ahead for next non-empty line
+      let lookAhead = i + 1;
+      while (lookAhead < lines.length && lines[lookAhead].trim() === '') {
+        lookAhead++;
+      }
+      // If next non-empty line is still indented more than task, include the empty lines
+      if (lookAhead < lines.length) {
+        const nextIndent = lines[lookAhead].match(INDENT_REGEX)?.[1].length ?? 0;
+        if (nextIndent > taskIndent) {
+          // Include all empty lines up to the next content
+          while (i < lookAhead) {
+            taskLines.push(lines[i]);
+            i++;
+          }
+          continue;
+        }
+      }
+      // Otherwise, empty line ends the block
       break;
     }
-    if (currentIndent <= taskIndent && currentLine.trim() !== '') {
+    if (currentIndent <= taskIndent) {
       break;
     }
 
@@ -107,9 +126,15 @@ export function moveTaskInContent(
       const sectionTitle = sectionMatch[1].trim();
       if (sectionTitle === targetSectionTitle || sectionTitle.startsWith(targetSectionTitle)) {
         if (position === 'top') {
-          // Insert right after the section header (skip empty lines)
+          // Insert right after the section header and any description
+          // Skip only description quotes, not empty lines (we'll insert before existing content)
           let insertAfterHeader = j + 1;
-          while (insertAfterHeader < newLines.length && newLines[insertAfterHeader].trim() === '') {
+          // Skip description lines (> ...)
+          while (insertAfterHeader < newLines.length && newLines[insertAfterHeader].match(/^>\s*/)) {
+            insertAfterHeader++;
+          }
+          // Skip at most one empty line after header/description
+          if (insertAfterHeader < newLines.length && newLines[insertAfterHeader].trim() === '') {
             insertAfterHeader++;
           }
           targetInsertIndex = insertAfterHeader;
@@ -264,15 +289,35 @@ export function moveTaskToParent(
   taskLines.push(`${childIndent}- ${checkboxPart} ${taskText}`);
 
   // Find and re-indent any children of the moved task
+  // Empty lines are included if followed by more children at greater indentation
   let i = taskIndex + 1;
   while (i < lines.length) {
     const currentLine = lines[i];
     const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
 
+    // Empty lines: look ahead to see if more children follow
     if (currentLine.trim() === '') {
+      // Look ahead for next non-empty line
+      let lookAhead = i + 1;
+      while (lookAhead < lines.length && lines[lookAhead].trim() === '') {
+        lookAhead++;
+      }
+      // If next non-empty line is still indented more than task, include the empty lines
+      if (lookAhead < lines.length) {
+        const nextIndent = lines[lookAhead].match(INDENT_REGEX)?.[1].length ?? 0;
+        if (nextIndent > originalTaskIndent) {
+          // Include all empty lines (they stay empty, just included in the block)
+          while (i < lookAhead) {
+            taskLines.push('');
+            i++;
+          }
+          continue;
+        }
+      }
+      // Otherwise, empty line ends the block
       break;
     }
-    if (currentIndent <= originalTaskIndent && currentLine.trim() !== '') {
+    if (currentIndent <= originalTaskIndent) {
       break;
     }
 
@@ -522,17 +567,34 @@ export function deleteTaskInContent(
   const taskIndent = lines[lineIndex]?.match(INDENT_REGEX)?.[1].length ?? 0;
 
   // Count lines to remove (task + all children)
+  // Empty lines are included if followed by more children at greater indentation
   let linesToRemove = 1;
   let i = lineIndex + 1;
   while (i < lines.length) {
     const currentLine = lines[i];
     const currentIndent = currentLine.match(INDENT_REGEX)?.[1].length ?? 0;
 
-    // Empty line or line with content at same/less indentation ends the block
+    // Empty lines: look ahead to see if more children follow
     if (currentLine.trim() === '') {
+      // Look ahead for next non-empty line
+      let lookAhead = i + 1;
+      while (lookAhead < lines.length && lines[lookAhead].trim() === '') {
+        lookAhead++;
+      }
+      // If next non-empty line is still indented more than task, include the empty lines
+      if (lookAhead < lines.length) {
+        const nextIndent = lines[lookAhead].match(INDENT_REGEX)?.[1].length ?? 0;
+        if (nextIndent > taskIndent) {
+          // Include all empty lines
+          linesToRemove += lookAhead - i;
+          i = lookAhead;
+          continue;
+        }
+      }
+      // Otherwise, empty line ends the block
       break;
     }
-    if (currentIndent <= taskIndent && currentLine.trim() !== '') {
+    if (currentIndent <= taskIndent) {
       break;
     }
 
