@@ -459,7 +459,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
     this._isUndoRedo = true;
     try {
+      this._ignoreNextFileChange = true;
       await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(previousContent, 'utf-8'));
+      await this._refresh();
     } finally {
       this._isUndoRedo = false;
     }
@@ -475,7 +477,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
     this._isUndoRedo = true;
     try {
+      this._ignoreNextFileChange = true;
       await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(nextContent, 'utf-8'));
+      await this._refresh();
     } finally {
       this._isUndoRedo = false;
     }
@@ -592,6 +596,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       }
 
       await this._writeActiveFile(text);
+      await this._refresh();
     } catch (error) {
       console.error('Error toggling task:', error);
     }
@@ -680,6 +685,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       text = moveTaskInContent(text, taskLine, targetSection, position, afterLine);
       console.log('[_handleMove] after:', text.split('\n').map((l, i) => `${i+1}: ${l}`).join('\n'));
       await this._writeActiveFile(text);
+      await this._refresh();
     } catch (error) {
       console.error('Error moving task:', error);
     }
@@ -697,6 +703,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       text = moveTaskToParent(text, taskLine, parentLine, position, afterLine);
       console.log('[_handleMoveToParent] after:', text.split('\n').map((l, i) => `${i+1}: ${l}`).join('\n'));
       await this._writeActiveFile(text);
+      await this._refresh();
     } catch (error) {
       console.error('Error moving task to parent:', error);
     }
@@ -747,6 +754,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       let text = await this._readActiveFile();
       text = editTaskTextInContent(text, line, newText);
       await this._writeActiveFile(text);
+      await this._refresh();
     } catch (error) {
       console.error('Error editing task text:', error);
     }
@@ -781,6 +789,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       let text = await this._readActiveFile();
       text = deleteTaskInContent(text, line);
       await this._writeActiveFile(text);
+      await this._refresh();
     } catch (error) {
       console.error('Error deleting task:', error);
     }
