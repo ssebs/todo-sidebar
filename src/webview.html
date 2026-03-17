@@ -217,6 +217,20 @@
     .tasks {
       min-height: 20px;
     }
+    .subcategory {
+      margin-top: 6px;
+    }
+    .subcategory-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85em;
+      font-weight: 600;
+      color: var(--vscode-descriptionForeground);
+      padding: 4px 0 3px 0;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
     .sortable-placeholder {
       height: 40px;
       background: var(--vscode-list-hoverBackground);
@@ -387,17 +401,79 @@
       `;
     }
 
-    function renderColumn(column) {
-      const tasks = column.tasks.map(task => renderTask(task, column.isDoneColumn)).join('');
-      const descriptionHtml = column.description ? `<p class="column-description">${escapeHtml(column.description)}</p>` : '';
+    function renderSubCategory(subCategory, isDoneColumn, columnTitle) {
+      const tasks = subCategory.tasks.map(task => renderTask(task, isDoneColumn)).join('');
       return `
-        <div class="column" data-section="${escapeHtml(column.title)}" data-is-done="${column.isDoneColumn}">
+        <div class="subcategory">
+          <div class="subcategory-header">
+            <span>${escapeHtml(subCategory.title)}</span>
+            <button class="add-task-btn" data-section="${escapeHtml(columnTitle)}" data-subcategory="${escapeHtml(subCategory.title)}" title="Add task to ${escapeHtml(subCategory.title)}">+</button>
+          </div>
+          <div class="tasks" data-section="${escapeHtml(columnTitle)}" data-subcategory="${escapeHtml(subCategory.title)}" data-subcategory-line="${subCategory.line}">${tasks}</div>
+        </div>
+      `;
+    }
+
+    function renderColumn(column) {
+      const descriptionHtml = column.description ? `<p class="column-description">${escapeHtml(column.description)}</p>` : '';
+      const escapedTitle = escapeHtml(column.title);
+
+      // If no subcategories, render exactly as before (backward compatible)
+      const subCategories = column.subCategories || [];
+      if (subCategories.length === 0) {
+        const tasks = column.tasks.map(task => renderTask(task, column.isDoneColumn)).join('');
+        return `
+          <div class="column" data-section="${escapedTitle}" data-is-done="${column.isDoneColumn}">
+            <div class="column-header">
+              <span class="column-title">${escapedTitle}</span>
+              <button class="add-task-btn" data-section="${escapedTitle}" title="Add task">+</button>
+            </div>
+            ${descriptionHtml}
+            <div class="tasks" data-section="${escapedTitle}">${tasks}</div>
+          </div>
+        `;
+      }
+
+      // Merge ungrouped tasks and subcategories, sorted by line number
+      const items = [];
+      column.tasks.forEach(task => {
+        items.push({ type: 'task', line: task.line, task });
+      });
+      subCategories.forEach(sc => {
+        items.push({ type: 'subCategory', line: sc.line, subCategory: sc });
+      });
+      items.sort((a, b) => a.line - b.line);
+
+      // Render items, grouping consecutive ungrouped tasks into a single .tasks div
+      let contentHtml = '';
+      let pendingTasks = [];
+
+      function flushPendingTasks() {
+        if (pendingTasks.length > 0) {
+          const tasksHtml = pendingTasks.map(t => renderTask(t, column.isDoneColumn)).join('');
+          contentHtml += `<div class="tasks" data-section="${escapedTitle}">${tasksHtml}</div>`;
+          pendingTasks = [];
+        }
+      }
+
+      for (const item of items) {
+        if (item.type === 'task') {
+          pendingTasks.push(item.task);
+        } else {
+          flushPendingTasks();
+          contentHtml += renderSubCategory(item.subCategory, column.isDoneColumn, column.title);
+        }
+      }
+      flushPendingTasks();
+
+      return `
+        <div class="column" data-section="${escapedTitle}" data-is-done="${column.isDoneColumn}">
           <div class="column-header">
-            <span class="column-title">${escapeHtml(column.title)}</span>
-            <button class="add-task-btn" data-section="${escapeHtml(column.title)}" title="Add task">+</button>
+            <span class="column-title">${escapedTitle}</span>
+            <button class="add-task-btn" data-section="${escapedTitle}" title="Add task">+</button>
           </div>
           ${descriptionHtml}
-          <div class="tasks" data-section="${escapeHtml(column.title)}">${tasks}</div>
+          ${contentHtml}
         </div>
       `;
     }
@@ -712,12 +788,22 @@
         });
       });
 
-      // Add task buttons
-      document.querySelectorAll('.add-task-btn').forEach(btn => {
+      // Add task buttons (column-level, without subcategory)
+      document.querySelectorAll('.add-task-btn:not([data-subcategory])').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const section = e.target.dataset.section;
           vscode.postMessage({ type: 'addTask', section });
+        });
+      });
+
+      // Add task buttons (subcategory-level)
+      document.querySelectorAll('.add-task-btn[data-subcategory]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const section = e.target.dataset.section;
+          const subCategory = e.target.dataset.subcategory;
+          vscode.postMessage({ type: 'addTaskToSubCategory', section, subCategory });
         });
       });
 
@@ -823,11 +909,18 @@
             afterLine
           });
         } else if (targetSection) {
-          // Dropped into a column
+          // Dropped into a column (or subcategory)
           const prevSibling = evt.item.previousElementSibling;
+          const targetSubcategoryLine = evt.to.dataset.subcategoryLine;
           if (newIndex === 0 || !prevSibling) {
-            console.log(`[${source}] move top`, { taskLine, targetSection });
-            vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+            if (targetSubcategoryLine) {
+              // Dropped at top of a subcategory - place after the ### header
+              console.log(`[${source}] move after subcategory header`, { taskLine, targetSection, afterLine: parseInt(targetSubcategoryLine) });
+              vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'after', afterLine: parseInt(targetSubcategoryLine) });
+            } else {
+              console.log(`[${source}] move top`, { taskLine, targetSection });
+              vscode.postMessage({ type: 'move', taskLine, targetSection, position: 'top' });
+            }
           } else {
             const afterLine = parseInt(prevSibling.dataset.line);
             console.log(`[${source}] move after`, { taskLine, targetSection, afterLine });

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { parseMarkdown, Board, Task, Column } from './parser';
-import { toggleTaskInContent, moveTaskInContent, moveTaskToParent, addTaskToSection, editTaskTextInContent, addSubtaskToParent, deleteTaskInContent } from './serializer';
+import { toggleTaskInContent, moveTaskInContent, moveTaskToParent, addTaskToSection, editTaskTextInContent, addSubtaskToParent, deleteTaskInContent, addTaskToSubCategory } from './serializer';
 
 export class KanbanViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'todoSidebar.kanbanView';
@@ -98,6 +98,9 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         case 'addSubtask':
           await this._handleAddSubtask(message.parentLine);
           break;
+        case 'addTaskToSubCategory':
+          await this._handleAddTaskToSubCategory(message.section, message.subCategory);
+          break;
         case 'undo':
           await this._handleUndo();
           break;
@@ -187,16 +190,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   }
 
   private _setupFileWatchers() {
-    // Watch for text document changes - use debounced refresh to avoid rapid re-renders
+    // Watch for text document saves - refresh immediately when user saves
     this._disposables.push(
-      vscode.workspace.onDidChangeTextDocument((e) => {
-        if (this._activeFileUri && e.document.uri.toString() === this._activeFileUri.toString()) {
-          // Skip if we triggered this change ourselves
-          if (this._ignoreNextFileChange) {
-            this._ignoreNextFileChange = false;
-            return;
-          }
-          this._debouncedRefresh();
+      vscode.workspace.onDidSaveTextDocument((doc) => {
+        if (this._activeFileUri && doc.uri.toString() === this._activeFileUri.toString()) {
+          this._refresh();
         }
       })
     );
@@ -390,6 +388,14 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     if (!this._activeFileUri) {
       return '';
     }
+    // Read from the open editor document buffer first (handles unsaved changes)
+    const openDoc = vscode.workspace.textDocuments.find(
+      doc => doc.uri.toString() === this._activeFileUri!.toString()
+    );
+    if (openDoc) {
+      return openDoc.getText();
+    }
+    // Fall back to reading from disk
     const content = await vscode.workspace.fs.readFile(this._activeFileUri);
     return Buffer.from(content).toString('utf-8');
   }
@@ -609,6 +615,13 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
           return true;
         }
       }
+      for (const sub of column.subCategories) {
+        for (const task of sub.tasks) {
+          if (task.line === line) {
+            return true;
+          }
+        }
+      }
     }
     return false;
   }
@@ -629,6 +642,11 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     for (const column of board.columns) {
       if (findInTasks(column.tasks)) {
         return column;
+      }
+      for (const sub of column.subCategories) {
+        if (findInTasks(sub.tasks)) {
+          return column;
+        }
       }
     }
 
@@ -777,6 +795,23 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
       }
     } catch (error) {
       console.error('Error adding subtask:', error);
+    }
+  }
+
+  private async _handleAddTaskToSubCategory(section: string, subCategory: string) {
+    if (!this._activeFileUri) {
+      return;
+    }
+    try {
+      const text = await this._readActiveFile();
+      const result = addTaskToSubCategory(text, section, subCategory);
+      if (result.line > 0) {
+        this._pendingEditLine = result.line;
+        await this._writeActiveFile(result.content);
+        await this._refresh(true);
+      }
+    } catch (error) {
+      console.error('Error adding task to subcategory:', error);
     }
   }
 

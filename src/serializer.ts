@@ -8,7 +8,8 @@ const TASK_WITH_MD_CHECKBOX_REGEX = /^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.
 const TASK_TEXT_MD_CHECKBOX_REGEX = /^(\s*[-*]\s+\[[ xX]\]\s+)(.+)$/;
 const TASK_TEXT_UNICODE_CHECKBOX_REGEX = /^(\s*[-*]\s+[☐☑✓✗]\s+)(.+)$/;
 const TASK_TEXT_PLAIN_BULLET_REGEX = /^(\s*[-*]\s+)(.+)$/;
-const SECTION_HEADER_REGEX = /^##\s+(.+)$/;
+const SECTION_HEADER_REGEX = /^##\s+(?!#)(.+)$/;
+const SUBCATEGORY_HEADER_REGEX = /^###\s+(.+)$/;
 
 /**
  * Helper function to parse content into lines while preserving line ending style
@@ -562,6 +563,66 @@ export function removeCheckboxFromTask(
   }
 
   return content;
+}
+
+export function addTaskToSubCategory(
+  content: string,
+  sectionTitle: string,
+  subCategoryTitle: string
+): { content: string; line: number } {
+  const { lines, lineEnding } = parseContentLines(content);
+
+  // Find the ## section header matching sectionTitle
+  let sectionIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(SECTION_HEADER_REGEX);
+    if (match && match[1].trim() === sectionTitle) {
+      sectionIndex = i;
+      break;
+    }
+  }
+
+  if (sectionIndex === -1) {
+    return { content, line: -1 };
+  }
+
+  // Find the end of this section (next ## header or end of file)
+  let sectionEnd = lines.length;
+  for (let i = sectionIndex + 1; i < lines.length; i++) {
+    if (lines[i].match(SECTION_HEADER_REGEX)) {
+      sectionEnd = i;
+      break;
+    }
+  }
+
+  // Within the section, find the ### header matching subCategoryTitle
+  let subCategoryIndex = -1;
+  for (let i = sectionIndex + 1; i < sectionEnd; i++) {
+    const match = lines[i].match(SUBCATEGORY_HEADER_REGEX);
+    if (match && match[1].trim() === subCategoryTitle) {
+      subCategoryIndex = i;
+      break;
+    }
+  }
+
+  if (subCategoryIndex === -1) {
+    return { content, line: -1 };
+  }
+
+  // Find insertion point: skip blank lines after the ### header
+  let insertIndex = subCategoryIndex + 1;
+  while (insertIndex < sectionEnd && lines[insertIndex].trim() === '') {
+    insertIndex++;
+  }
+
+  // Insert new task
+  const newTask = '- [ ] New task';
+  lines.splice(insertIndex, 0, newTask);
+
+  return {
+    content: lines.join(lineEnding),
+    line: insertIndex + 1 // 1-indexed
+  };
 }
 
 export function deleteTaskInContent(

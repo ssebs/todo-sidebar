@@ -4,15 +4,29 @@
 
 ## In Progress 🚀
 
+- [ ] first thing
+  - [ ] next
+
 ## Backlog 📋
 
 > This is a sub-description
 
+- [ ] Another task
+- [ ] One task
+- [ ] third
+
+### Frontend
+
 - [ ] something else
+- [ ] test
   - [ ] New task
   - [ ] New task
 
+### Backend
+
 - [ ] Rewrite in rust
+- [ ] Rewrite in go
+- [ ] Rewrite in php
 
 ## Done ✅
 

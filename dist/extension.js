@@ -210,6 +210,9 @@ class KanbanViewProvider {
                 case 'addSubtask':
                     await this._handleAddSubtask(message.parentLine);
                     break;
+                case 'addTaskToSubCategory':
+                    await this._handleAddTaskToSubCategory(message.section, message.subCategory);
+                    break;
                 case 'undo':
                     await this._handleUndo();
                     break;
@@ -295,15 +298,10 @@ class KanbanViewProvider {
         }
     }
     _setupFileWatchers() {
-        // Watch for text document changes - use debounced refresh to avoid rapid re-renders
-        this._disposables.push(vscode.workspace.onDidChangeTextDocument((e) => {
-            if (this._activeFileUri && e.document.uri.toString() === this._activeFileUri.toString()) {
-                // Skip if we triggered this change ourselves
-                if (this._ignoreNextFileChange) {
-                    this._ignoreNextFileChange = false;
-                    return;
-                }
-                this._debouncedRefresh();
+        // Watch for text document saves - refresh immediately when user saves
+        this._disposables.push(vscode.workspace.onDidSaveTextDocument((doc) => {
+            if (this._activeFileUri && doc.uri.toString() === this._activeFileUri.toString()) {
+                this._refresh();
             }
         }));
         // Watch for file system changes - use debounced refresh
@@ -477,6 +475,12 @@ class KanbanViewProvider {
         if (!this._activeFileUri) {
             return '';
         }
+        // Read from the open editor document buffer first (handles unsaved changes)
+        const openDoc = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === this._activeFileUri.toString());
+        if (openDoc) {
+            return openDoc.getText();
+        }
+        // Fall back to reading from disk
         const content = await vscode.workspace.fs.readFile(this._activeFileUri);
         return Buffer.from(content).toString('utf-8');
     }
@@ -671,6 +675,13 @@ class KanbanViewProvider {
                     return true;
                 }
             }
+            for (const sub of column.subCategories) {
+                for (const task of sub.tasks) {
+                    if (task.line === line) {
+                        return true;
+                    }
+                }
+            }
         }
         return false;
     }
@@ -689,6 +700,11 @@ class KanbanViewProvider {
         for (const column of board.columns) {
             if (findInTasks(column.tasks)) {
                 return column;
+            }
+            for (const sub of column.subCategories) {
+                if (findInTasks(sub.tasks)) {
+                    return column;
+                }
             }
         }
         return undefined;
@@ -827,6 +843,23 @@ class KanbanViewProvider {
         }
         catch (error) {
             console.error('Error adding subtask:', error);
+        }
+    }
+    async _handleAddTaskToSubCategory(section, subCategory) {
+        if (!this._activeFileUri) {
+            return;
+        }
+        try {
+            const text = await this._readActiveFile();
+            const result = (0, serializer_1.addTaskToSubCategory)(text, section, subCategory);
+            if (result.line > 0) {
+                this._pendingEditLine = result.line;
+                await this._writeActiveFile(result.content);
+                await this._refresh(true);
+            }
+        }
+        catch (error) {
+            console.error('Error adding task to subcategory:', error);
         }
     }
     async _handleDeleteTask(line) {
@@ -1118,6 +1151,7 @@ const COLUMN_HEADER_REGEX = /^##\s+(.+)$/;
 const MD_TASK_REGEX = /^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/;
 const UNICODE_TASK_REGEX = /^(\s*)[-*]\s+([☐☑✓✗])\s+(.+)$/;
 const NESTED_QUOTE_REGEX = /^(\s*)[-*]\s+>\s*(.+)$/;
+const SUBCATEGORY_HEADER_REGEX = /^###\s+(.+)$/;
 const BULLET_REGEX = /^(\s*)[-*]\s+(.+)$/;
 const CHECKBOX_PREFIX_REGEX = /^\[[ xX]\]|^[☐☑✓✗]/;
 function parseMarkdown(content) {
@@ -1130,6 +1164,7 @@ function parseMarkdown(content) {
         columns: []
     };
     let currentColumn = null;
+    let currentSubCategory = null;
     let taskStack = [];
     let foundFirstColumn = false;
     for (let i = 0; i < lines.length; i++) {
@@ -1164,14 +1199,16 @@ function parseMarkdown(content) {
                 description: '',
                 line: lineNumber,
                 isDoneColumn: title.toLowerCase().includes('done'),
-                tasks: []
+                tasks: [],
+                subCategories: []
             };
             board.columns.push(currentColumn);
+            currentSubCategory = null;
             taskStack = [];
             continue;
         }
-        // Column description: > text (after column header, before any tasks)
-        if (currentColumn && currentColumn.tasks.length === 0) {
+        // Column description: > text (after column header, before any tasks or subcategories)
+        if (currentColumn && currentColumn.tasks.length === 0 && currentColumn.subCategories.length === 0) {
             const descMatch = line.match(DESCRIPTION_REGEX);
             if (descMatch) {
                 if (currentColumn.description) {
@@ -1182,6 +1219,19 @@ function parseMarkdown(content) {
                 }
                 continue;
             }
+        }
+        // Subcategory header: ### Header (within a column)
+        const subCategoryMatch = line.match(SUBCATEGORY_HEADER_REGEX);
+        if (subCategoryMatch && currentColumn) {
+            const title = subCategoryMatch[1].trim();
+            currentSubCategory = {
+                title,
+                line: lineNumber,
+                tasks: []
+            };
+            currentColumn.subCategories.push(currentSubCategory);
+            taskStack = [];
+            continue;
         }
         // Task with markdown checkbox: - [ ] or - [x] or * [ ] or * [x]
         const taskMatch = line.match(MD_TASK_REGEX);
@@ -1205,8 +1255,9 @@ function parseMarkdown(content) {
                 taskStack[taskStack.length - 1].task.children.push(task);
             }
             else {
-                // Add as top-level task
-                currentColumn.tasks.push(task);
+                // Add as top-level task to subcategory or column
+                const targetTasks = currentSubCategory ? currentSubCategory.tasks : currentColumn.tasks;
+                targetTasks.push(task);
             }
             taskStack.push({ task, indent });
             continue;
@@ -1232,7 +1283,8 @@ function parseMarkdown(content) {
                 taskStack[taskStack.length - 1].task.children.push(task);
             }
             else {
-                currentColumn.tasks.push(task);
+                const targetTasks = currentSubCategory ? currentSubCategory.tasks : currentColumn.tasks;
+                targetTasks.push(task);
             }
             taskStack.push({ task, indent });
             continue;
@@ -1276,7 +1328,8 @@ function parseMarkdown(content) {
                 taskStack[taskStack.length - 1].task.children.push(bulletTask);
             }
             else {
-                currentColumn.tasks.push(bulletTask);
+                const targetTasks = currentSubCategory ? currentSubCategory.tasks : currentColumn.tasks;
+                targetTasks.push(bulletTask);
             }
             taskStack.push({ task: bulletTask, indent });
             continue;
@@ -1299,6 +1352,7 @@ exports.addTaskToSection = addTaskToSection;
 exports.editTaskTextInContent = editTaskTextInContent;
 exports.addSubtaskToParent = addSubtaskToParent;
 exports.removeCheckboxFromTask = removeCheckboxFromTask;
+exports.addTaskToSubCategory = addTaskToSubCategory;
 exports.deleteTaskInContent = deleteTaskInContent;
 // Regex constants for checkbox and indentation patterns
 const INDENT_REGEX = /^(\s*)/;
@@ -1310,7 +1364,8 @@ const TASK_WITH_MD_CHECKBOX_REGEX = /^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.
 const TASK_TEXT_MD_CHECKBOX_REGEX = /^(\s*[-*]\s+\[[ xX]\]\s+)(.+)$/;
 const TASK_TEXT_UNICODE_CHECKBOX_REGEX = /^(\s*[-*]\s+[☐☑✓✗]\s+)(.+)$/;
 const TASK_TEXT_PLAIN_BULLET_REGEX = /^(\s*[-*]\s+)(.+)$/;
-const SECTION_HEADER_REGEX = /^##\s+(.+)$/;
+const SECTION_HEADER_REGEX = /^##\s+(?!#)(.+)$/;
+const SUBCATEGORY_HEADER_REGEX = /^###\s+(.+)$/;
 /**
  * Helper function to parse content into lines while preserving line ending style
  */
@@ -1773,6 +1828,53 @@ function removeCheckboxFromTask(content, line) {
         return lines.join(lineEnding);
     }
     return content;
+}
+function addTaskToSubCategory(content, sectionTitle, subCategoryTitle) {
+    const { lines, lineEnding } = parseContentLines(content);
+    // Find the ## section header matching sectionTitle
+    let sectionIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+        const match = lines[i].match(SECTION_HEADER_REGEX);
+        if (match && match[1].trim() === sectionTitle) {
+            sectionIndex = i;
+            break;
+        }
+    }
+    if (sectionIndex === -1) {
+        return { content, line: -1 };
+    }
+    // Find the end of this section (next ## header or end of file)
+    let sectionEnd = lines.length;
+    for (let i = sectionIndex + 1; i < lines.length; i++) {
+        if (lines[i].match(SECTION_HEADER_REGEX)) {
+            sectionEnd = i;
+            break;
+        }
+    }
+    // Within the section, find the ### header matching subCategoryTitle
+    let subCategoryIndex = -1;
+    for (let i = sectionIndex + 1; i < sectionEnd; i++) {
+        const match = lines[i].match(SUBCATEGORY_HEADER_REGEX);
+        if (match && match[1].trim() === subCategoryTitle) {
+            subCategoryIndex = i;
+            break;
+        }
+    }
+    if (subCategoryIndex === -1) {
+        return { content, line: -1 };
+    }
+    // Find insertion point: skip blank lines after the ### header
+    let insertIndex = subCategoryIndex + 1;
+    while (insertIndex < sectionEnd && lines[insertIndex].trim() === '') {
+        insertIndex++;
+    }
+    // Insert new task
+    const newTask = '- [ ] New task';
+    lines.splice(insertIndex, 0, newTask);
+    return {
+        content: lines.join(lineEnding),
+        line: insertIndex + 1 // 1-indexed
+    };
 }
 function deleteTaskInContent(content, taskLine) {
     const { lines, lineEnding } = parseContentLines(content);

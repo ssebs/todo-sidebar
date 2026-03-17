@@ -81,18 +81,12 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
 
 ## TODO
 
-- H3 sub categories
 - More MD features:
-  - regular bullet items
-    - not checkboxes
-    - "tied" to the parent, so when the parent moves these move too
-    - can be dragged & edited similar to subtask behavior
-    - can be on all 3 task levels
   - edit section titles
   - edit section descriptions
   - add new section w/ + on title
   - edit title
-  - minimize section
+  - collapsable/expandable sections
 - Cleanup main file - split into:
   - filesystem
   - parser + file parsing code is regex hell

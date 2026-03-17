@@ -6,12 +6,19 @@ export interface Task {
   hasCheckbox: boolean;
 }
 
+export interface SubCategory {
+  title: string;
+  line: number;
+  tasks: Task[];
+}
+
 export interface Column {
   title: string;
   description: string;
   line: number;
   isDoneColumn: boolean;
   tasks: Task[];
+  subCategories: SubCategory[];
 }
 
 export interface Board {
@@ -27,6 +34,7 @@ const COLUMN_HEADER_REGEX = /^##\s+(.+)$/;
 const MD_TASK_REGEX = /^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/;
 const UNICODE_TASK_REGEX = /^(\s*)[-*]\s+([☐☑✓✗])\s+(.+)$/;
 const NESTED_QUOTE_REGEX = /^(\s*)[-*]\s+>\s*(.+)$/;
+const SUBCATEGORY_HEADER_REGEX = /^###\s+(.+)$/;
 const BULLET_REGEX = /^(\s*)[-*]\s+(.+)$/;
 const CHECKBOX_PREFIX_REGEX = /^\[[ xX]\]|^[☐☑✓✗]/;
 
@@ -41,6 +49,7 @@ export function parseMarkdown(content: string): Board {
   };
 
   let currentColumn: Column | null = null;
+  let currentSubCategory: SubCategory | null = null;
   let taskStack: { task: Task; indent: number }[] = [];
   let foundFirstColumn = false;
 
@@ -78,15 +87,17 @@ export function parseMarkdown(content: string): Board {
         description: '',
         line: lineNumber,
         isDoneColumn: title.toLowerCase().includes('done'),
-        tasks: []
+        tasks: [],
+        subCategories: []
       };
       board.columns.push(currentColumn);
+      currentSubCategory = null;
       taskStack = [];
       continue;
     }
 
-    // Column description: > text (after column header, before any tasks)
-    if (currentColumn && currentColumn.tasks.length === 0) {
+    // Column description: > text (after column header, before any tasks or subcategories)
+    if (currentColumn && currentColumn.tasks.length === 0 && currentColumn.subCategories.length === 0) {
       const descMatch = line.match(DESCRIPTION_REGEX);
       if (descMatch) {
         if (currentColumn.description) {
@@ -96,6 +107,20 @@ export function parseMarkdown(content: string): Board {
         }
         continue;
       }
+    }
+
+    // Subcategory header: ### Header (within a column)
+    const subCategoryMatch = line.match(SUBCATEGORY_HEADER_REGEX);
+    if (subCategoryMatch && currentColumn) {
+      const title = subCategoryMatch[1].trim();
+      currentSubCategory = {
+        title,
+        line: lineNumber,
+        tasks: []
+      };
+      currentColumn.subCategories.push(currentSubCategory);
+      taskStack = [];
+      continue;
     }
 
     // Task with markdown checkbox: - [ ] or - [x] or * [ ] or * [x]
@@ -122,8 +147,9 @@ export function parseMarkdown(content: string): Board {
         // Add as child to parent
         taskStack[taskStack.length - 1].task.children.push(task);
       } else {
-        // Add as top-level task
-        currentColumn.tasks.push(task);
+        // Add as top-level task to subcategory or column
+        const targetTasks = currentSubCategory ? currentSubCategory.tasks : currentColumn.tasks;
+        targetTasks.push(task);
       }
 
       taskStack.push({ task, indent });
@@ -153,7 +179,8 @@ export function parseMarkdown(content: string): Board {
       if (taskStack.length > 0) {
         taskStack[taskStack.length - 1].task.children.push(task);
       } else {
-        currentColumn.tasks.push(task);
+        const targetTasks = currentSubCategory ? currentSubCategory.tasks : currentColumn.tasks;
+        targetTasks.push(task);
       }
 
       taskStack.push({ task, indent });
@@ -205,7 +232,8 @@ export function parseMarkdown(content: string): Board {
       if (taskStack.length > 0) {
         taskStack[taskStack.length - 1].task.children.push(bulletTask);
       } else {
-        currentColumn.tasks.push(bulletTask);
+        const targetTasks = currentSubCategory ? currentSubCategory.tasks : currentColumn.tasks;
+        targetTasks.push(bulletTask);
       }
 
       taskStack.push({ task: bulletTask, indent });
