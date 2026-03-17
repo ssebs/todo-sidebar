@@ -31,6 +31,23 @@
       font-size: 1.2em;
       font-weight: bold;
       margin: 0 0 4px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .open-file-btn {
+      background: none;
+      border: none;
+      color: var(--vscode-textLink-foreground);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      opacity: 0.7;
+      padding: 4px 6px;
+      flex-shrink: 0;
+    }
+    .open-file-btn:hover {
+      opacity: 1;
     }
     .board-description {
       font-size: 0.9em;
@@ -112,6 +129,11 @@
     .task-checkbox {
       margin-top: 2px;
       cursor: pointer;
+    }
+    .bullet-marker {
+      margin-top: 2px;
+      flex-shrink: 0;
+      opacity: 0.6;
     }
     .task-text {
       flex: 1;
@@ -326,10 +348,13 @@
 
     function renderChildTask(child, isDoneColumn) {
       const grandchildren = child.children.map(c => renderChildTask(c, isDoneColumn)).join('');
+      const checkboxHtml = child.hasCheckbox
+        ? `<input type="checkbox" class="task-checkbox" ${child.checked ? 'checked' : ''} data-line="${child.line}" data-in-done="${isDoneColumn}">`
+        : '<span class="bullet-marker">•</span>';
       return `
         <div class="child-task" draggable="true" data-line="${child.line}" data-in-done="${isDoneColumn}">
           <div class="task-header">
-            <input type="checkbox" class="task-checkbox" ${child.checked ? 'checked' : ''} data-line="${child.line}" data-in-done="${isDoneColumn}">
+            ${checkboxHtml}
             <span class="task-text ${child.checked ? 'checked' : ''}">${escapeHtml(child.text)}</span>
             <div class="task-actions">
               <button class="add-subtask-btn" data-line="${child.line}" title="Add subtask">+</button>
@@ -343,11 +368,14 @@
 
     function renderTask(task, isDoneColumn = false) {
       const children = task.children.map(child => renderChildTask(child, isDoneColumn)).join('');
+      const checkboxHtml = task.hasCheckbox
+        ? `<input type="checkbox" class="task-checkbox" ${task.checked ? 'checked' : ''} data-line="${task.line}" data-in-done="${isDoneColumn}">`
+        : '<span class="bullet-marker">•</span>';
 
       return `
         <div class="task" draggable="true" data-line="${task.line}" data-in-done="${isDoneColumn}">
           <div class="task-header">
-            <input type="checkbox" class="task-checkbox" ${task.checked ? 'checked' : ''} data-line="${task.line}" data-in-done="${isDoneColumn}">
+            ${checkboxHtml}
             <span class="task-text ${task.checked ? 'checked' : ''}">${escapeHtml(task.text)}</span>
             <div class="task-actions">
               <button class="add-subtask-btn" data-line="${task.line}" title="Add subtask">+</button>
@@ -382,7 +410,7 @@
       const columns = board.columns.map(col => renderColumn(col)).join('');
       return `
         <div class="board-header">
-          ${board.title ? '<h2 class="board-title">' + escapeHtml(board.title) + '</h2>' : ''}
+          ${board.title ? '<h2 class="board-title"><span>' + escapeHtml(board.title) + '</span><button class="open-file-btn" id="openFileBtn" title="Open file in editor">&#x1F4DD;</button></h2>' : ''}
           ${board.description ? '<p class="board-description">' + escapeHtml(board.description) + '</p>' : ''}
         </div>
         <div class="board">${columns}</div>
@@ -707,6 +735,14 @@
           showSectionContextMenu(e, sectionTitle);
         });
       });
+
+      // Open file button in board header
+      const openFileBtn = document.getElementById('openFileBtn');
+      if (openFileBtn) {
+        openFileBtn.addEventListener('click', () => {
+          vscode.postMessage({ type: 'openAtLine', line: 1 });
+        });
+      }
 
       // Add subtask buttons
       document.querySelectorAll('.add-subtask-btn').forEach(btn => {

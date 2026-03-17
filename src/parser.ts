@@ -27,7 +27,7 @@ const COLUMN_HEADER_REGEX = /^##\s+(.+)$/;
 const MD_TASK_REGEX = /^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/;
 const UNICODE_TASK_REGEX = /^(\s*)[-*]\s+([☐☑✓✗])\s+(.+)$/;
 const NESTED_QUOTE_REGEX = /^(\s*)[-*]\s+>\s*(.+)$/;
-const BULLET_REGEX = /^(\s+)[-*]\s+(.+)$/;
+const BULLET_REGEX = /^(\s*)[-*]\s+(.+)$/;
 const CHECKBOX_PREFIX_REGEX = /^\[[ xX]\]|^[☐☑✓✗]/;
 
 export function parseMarkdown(content: string): Board {
@@ -178,9 +178,9 @@ export function parseMarkdown(content: string): Board {
       continue;
     }
 
-    // Nested bullet point: - item or * item (without checkbox, indented)
+    // Bullet point: - item or * item (without checkbox, any indentation level)
     const bulletMatch = line.match(BULLET_REGEX);
-    if (bulletMatch && taskStack.length > 0) {
+    if (bulletMatch && currentColumn) {
       const indent = bulletMatch[1].length;
       const text = bulletMatch[2].trim();
 
@@ -189,7 +189,7 @@ export function parseMarkdown(content: string): Board {
         continue;
       }
 
-      const childTask: Task = {
+      const bulletTask: Task = {
         text,
         checked: false,
         line: lineNumber,
@@ -197,14 +197,19 @@ export function parseMarkdown(content: string): Board {
         hasCheckbox: false
       };
 
-      // Find appropriate parent based on indentation
-      while (taskStack.length > 1 && taskStack[taskStack.length - 1].indent >= indent) {
+      // Find parent based on indentation
+      while (taskStack.length > 0 && taskStack[taskStack.length - 1].indent >= indent) {
         taskStack.pop();
       }
 
       if (taskStack.length > 0) {
-        taskStack[taskStack.length - 1].task.children.push(childTask);
+        taskStack[taskStack.length - 1].task.children.push(bulletTask);
+      } else {
+        currentColumn.tasks.push(bulletTask);
       }
+
+      taskStack.push({ task: bulletTask, indent });
+      continue;
     }
   }
 

@@ -92,6 +92,7 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
   - edit section descriptions
   - add new section w/ + on title
   - edit title
+  - minimize section
 - Cleanup main file - split into:
   - filesystem
   - parser + file parsing code is regex hell

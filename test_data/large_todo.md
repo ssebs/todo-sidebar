@@ -7,18 +7,11 @@
 - [ ] Create Player Part 1
   - > no animations for now
   - [x] Singleplayer / Multiplayer code separation
-  - [ ] Player scene + component scripts
-    - > See moto-player-controller
-    - [ ] physics
-    - [ ] movement
-    - [ ] gearing
   - [ ] basic character selection (select male/female)
   - [x] basic bike selection (select bike)
   - [ ] InputManager in game
     - [ ] camera control
     - [ ] bike control
-- [ ] Create Test Level - Gym - player controller, with tp. Basically in game documentation.
-  - (E.g. How far can you jump)
 
 ## Up Next 📋
 
@@ -94,6 +87,14 @@
 - [ ] Add transition animations (e.g. circle in/out) between Menu States / Loading states
 
 ## Done ✅
+
+- [x] Create Test Level - Gym - player controller, with tp. Basically in game documentation.
+  - (E.g. How far can you jump)
+  - [ ] Player scene + component scripts
+    - > See moto-player-controller
+    - [ ] physics
+    - [ ] movement
+    - [ ] gearing
 
 - [x] format on save
 

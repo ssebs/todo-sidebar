@@ -7,6 +7,7 @@ const UNICODE_CHECKBOX_CHECKED_REGEX = /([-*]\s+)[☑✓]/;
 const TASK_WITH_MD_CHECKBOX_REGEX = /^\s*[-*]\s+(\[[ xX]\]|[☐☑✓✗])?\s*(.+)$/;
 const TASK_TEXT_MD_CHECKBOX_REGEX = /^(\s*[-*]\s+\[[ xX]\]\s+)(.+)$/;
 const TASK_TEXT_UNICODE_CHECKBOX_REGEX = /^(\s*[-*]\s+[☐☑✓✗]\s+)(.+)$/;
+const TASK_TEXT_PLAIN_BULLET_REGEX = /^(\s*[-*]\s+)(.+)$/;
 const SECTION_HEADER_REGEX = /^##\s+(.+)$/;
 
 /**
@@ -270,7 +271,7 @@ export function moveTaskToParent(
   if (!taskMatch) {
     return content;
   }
-  const checkboxPart = taskMatch[1] || '[ ]';
+  const checkboxPart = taskMatch[1]; // undefined for plain bullets
   const taskText = taskMatch[2];
 
   // Get the parent's indentation level
@@ -285,8 +286,12 @@ export function moveTaskToParent(
   const taskLines: string[] = [];
   const originalTaskIndent = taskContent.match(INDENT_REGEX)?.[1].length ?? 0;
 
-  // The task itself, re-indented as a child
-  taskLines.push(`${childIndent}- ${checkboxPart} ${taskText}`);
+  // The task itself, re-indented as a child (preserve checkbox or plain bullet)
+  if (checkboxPart) {
+    taskLines.push(`${childIndent}- ${checkboxPart} ${taskText}`);
+  } else {
+    taskLines.push(`${childIndent}- ${taskText}`);
+  }
 
   // Find and re-indent any children of the moved task
   // Empty lines are included if followed by more children at greater indentation
@@ -476,6 +481,13 @@ export function editTaskTextInContent(
   const unicodeMatch = currentLine.match(TASK_TEXT_UNICODE_CHECKBOX_REGEX);
   if (unicodeMatch) {
     lines[lineIndex] = unicodeMatch[1] + newText;
+    return lines.join(lineEnding);
+  }
+
+  // Match plain bullet: - text or * text (no checkbox)
+  const bulletMatch = currentLine.match(TASK_TEXT_PLAIN_BULLET_REGEX);
+  if (bulletMatch) {
+    lines[lineIndex] = bulletMatch[1] + newText;
     return lines.join(lineEnding);
   }
 
