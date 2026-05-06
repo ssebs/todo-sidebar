@@ -5,16 +5,13 @@
 > Take it slow, fix bugs
 
 ### EPIC
-- [ ] item
-  - [ ] subitem
-- [x] test
+- [ ] Use [tutorial-gamemode-objects](PLAN-tut-gamemodeobject.md) system
+  - [x] Issues:
+    - [x] Shouldn't have to add tutoriallessson node under course & connect. instead just add nested resources...
+    - [x] TutorialLesson trigger is confusing, and step doesn't 
+    - [ ] How to start TutorialCourse? No event start circle...
 
 ### WIP
-- [ ] Use [tutorial-gamemode-objects](PLAN-tut-gamemodeobject.md) system
-  - [ ] Issues:
-    - [ ] Shouldn't have to add tutoriallessson node under course & connect. instead just add nested resources...
-    - [ ] TutorialLesson trigger is confusing, and step doesn't 
-    - [ ] How to start TutorialCourse? No event start circle...
 
 - [ ] [code review time](./code-review-20260430.md)
   - [ ] make todo list
@@ -27,6 +24,8 @@
     - [ ] todos & dead code
 
 ## HI-PRI‼️
+
+- [ ] test
 
 - [ ] Finish tutorial:
   - [ ] Make tutorial part of map, diff circles do diff events
@@ -331,6 +330,9 @@
 - [ ] Add text chat
 
 ## Done ✅
+
+- [x] item
+  - [ ] subitem
 
 - [x] Basic core gameplay loop & implement gamemodes
   - [x] start gamemodes via ~~map select~~ start circles

@@ -140,15 +140,15 @@ class KanbanViewProvider {
     _activeFileUri;
     _board;
     _disposables = [];
+    // Listeners registered inside resolveWebviewView; disposed on each re-resolve
+    // to prevent leaking duplicate handlers when VSCode rebuilds the webview.
+    _perResolveDisposables = [];
     _pendingEditLine;
     // History stack for undo/redo
     _historyStack = [];
     _historyIndex = -1;
     _maxHistorySize = 50;
     _isUndoRedo = false;
-    // Periodic refresh timer
-    _periodicRefreshTimer;
-    _periodicRefreshInterval = 5000; // 5 seconds
     // Debounce timer for refresh
     _refreshDebounceTimer;
     _refreshDebounceMs = 100; // Debounce refresh calls by 100ms
@@ -159,9 +159,15 @@ class KanbanViewProvider {
     _writeQueue = [];
     // Flag to ignore file watcher events during our own writes
     _ignoreNextFileChange = false;
+    // Flag to ignore onDidSaveTextDocument when we triggered the save (the
+    // caller already calls _refresh() explicitly).
+    _ignoreNextSave = false;
     // Per-line debounce for auto-mark-done from onDidChangeTextDocument
     // Maps 1-indexed line -> timestamp of last auto-trigger; prevents re-entrancy loops
     _recentlyAutoToggled = new Map();
+    // Cached config value, refreshed via onDidChangeConfiguration (avoids reading
+    // workspace config on every onDidChangeTextDocument event).
+    _shouldMoveWhenCheckingInEditor = true;
     constructor(_context) {
         this._context = _context;
     }
@@ -171,20 +177,23 @@ class KanbanViewProvider {
             enableScripts: true,
             localResourceRoots: [this._context.extensionUri]
         };
+        // Dispose any listeners from a prior resolve. VSCode re-resolves the
+        // webview after it's been hidden long enough to be torn down; without
+        // this, every re-resolve stacked another visibility + message handler.
+        for (const d of this._perResolveDisposables) {
+            d.dispose();
+        }
+        this._perResolveDisposables = [];
         // Don't set HTML here - let _refresh() handle it based on whether activeFile is set
         // webviewView.webview.html will be set in the restoration logic or _refresh()
         // Handle visibility changes - refresh when panel becomes visible
-        webviewView.onDidChangeVisibility(() => {
+        this._perResolveDisposables.push(webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible && this._activeFileUri) {
                 this._refresh();
-                this._startPeriodicRefresh();
             }
-            else {
-                this._stopPeriodicRefresh();
-            }
-        });
+        }));
         // Handle messages from webview
-        webviewView.webview.onDidReceiveMessage(async (message) => {
+        this._perResolveDisposables.push(webviewView.webview.onDidReceiveMessage(async (message) => {
             switch (message.type) {
                 case 'toggle':
                     await this._handleToggle(message.line, message.checked, message.targetColumn);
@@ -248,7 +257,7 @@ class KanbanViewProvider {
                     await this._handleCancelWizard();
                     break;
             }
-        });
+        }));
         // Set up file watchers only once
         if (this._disposables.length === 0) {
             this._setupFileWatchers();
@@ -279,35 +288,18 @@ class KanbanViewProvider {
         }
         // Always refresh when view becomes visible (this will show wizard or board)
         this._refresh();
-        if (this._activeFileUri) {
-            this._startPeriodicRefresh();
-        }
-    }
-    _startPeriodicRefresh() {
-        // Clear any existing timer
-        this._stopPeriodicRefresh();
-        // Only start if view is visible and a file is active
-        if (this._view?.visible && this._activeFileUri) {
-            this._periodicRefreshTimer = setInterval(() => {
-                if (this._view?.visible && this._activeFileUri) {
-                    this._refresh();
-                }
-                else {
-                    this._stopPeriodicRefresh();
-                }
-            }, this._periodicRefreshInterval);
-        }
-    }
-    _stopPeriodicRefresh() {
-        if (this._periodicRefreshTimer) {
-            clearInterval(this._periodicRefreshTimer);
-            this._periodicRefreshTimer = undefined;
-        }
     }
     _setupFileWatchers() {
+        // Initialize cached config
+        const initCfg = vscode.workspace.getConfiguration('todoSidebar');
+        this._shouldMoveWhenCheckingInEditor = initCfg.get('shouldMoveWhenCheckingInEditor', true);
         // Watch for text document saves - refresh immediately when user saves
         this._disposables.push(vscode.workspace.onDidSaveTextDocument((doc) => {
             if (this._activeFileUri && doc.uri.toString() === this._activeFileUri.toString()) {
+                if (this._ignoreNextSave) {
+                    this._ignoreNextSave = false;
+                    return;
+                }
                 this._refresh();
             }
         }));
@@ -338,6 +330,10 @@ class KanbanViewProvider {
             if (e.affectsConfiguration('todoSidebar.hiddenSections')) {
                 this._refresh();
             }
+            if (e.affectsConfiguration('todoSidebar.shouldMoveWhenCheckingInEditor')) {
+                const cfg = vscode.workspace.getConfiguration('todoSidebar');
+                this._shouldMoveWhenCheckingInEditor = cfg.get('shouldMoveWhenCheckingInEditor', true);
+            }
         }));
         // Auto-mark-done on text edits: when a top-level task line transitions to checked
         // (e.g. via the markdown-inline-editor click-to-toggle, or manual edit), trigger
@@ -349,8 +345,7 @@ class KanbanViewProvider {
             if (event.document.uri.toString() !== this._activeFileUri.toString()) {
                 return;
             }
-            const cfg = vscode.workspace.getConfiguration('todoSidebar');
-            if (!cfg.get('shouldMoveWhenCheckingInEditor', true)) {
+            if (!this._shouldMoveWhenCheckingInEditor) {
                 return;
             }
             for (const change of event.contentChanges) {
@@ -428,8 +423,6 @@ class KanbanViewProvider {
         // Clear history when switching files
         this._historyStack = [];
         this._historyIndex = -1;
-        // Restart periodic refresh with new file
-        this._stopPeriodicRefresh();
         // Store in workspace settings by directly writing to .vscode/settings.json
         try {
             const hasWorkspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
@@ -525,7 +518,6 @@ class KanbanViewProvider {
             vscode.window.showErrorMessage(`Failed to save todo file selection: ${e}`);
         }
         await this._refresh();
-        this._startPeriodicRefresh();
     }
     async refresh() {
         await this._refresh();
@@ -555,12 +547,13 @@ class KanbanViewProvider {
         if (!this._activeFileUri) {
             return '';
         }
-        // Read from the open editor document buffer first (handles unsaved changes)
+        // Prefer the editor buffer only if it has unsaved changes; otherwise the
+        // on-disk content is authoritative (and is fresher than the buffer right
+        // after our fast-path disk writes, before VSCode auto-reloads the editor).
         const openDoc = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === this._activeFileUri.toString());
-        if (openDoc) {
+        if (openDoc && openDoc.isDirty) {
             return openDoc.getText();
         }
-        // Fall back to reading from disk
         const content = await vscode.workspace.fs.readFile(this._activeFileUri);
         return Buffer.from(content).toString('utf-8');
     }
@@ -589,11 +582,14 @@ class KanbanViewProvider {
                 }
                 // Set flag to ignore the file watcher event we're about to trigger
                 this._ignoreNextFileChange = true;
-                // If the file is open in an editor, edit through the doc buffer so the
-                // editor stays in sync (avoids "file on disk is newer" save conflicts).
-                // Otherwise, write directly to disk.
+                // Only edit through the doc buffer when the editor has unsaved
+                // changes (rare). A full-document WorkspaceEdit + save on every move
+                // forces VSCode to re-tokenize the entire file in the visible editor,
+                // which causes UI freezes on larger files. For a clean doc, writing
+                // to disk lets VSCode auto-reload the editor with no conflict.
                 const openDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === this._activeFileUri.toString());
-                if (openDoc) {
+                if (openDoc && openDoc.isDirty) {
+                    this._ignoreNextSave = true;
                     const edit = new vscode.WorkspaceEdit();
                     const fullRange = new vscode.Range(openDoc.positionAt(0), openDoc.positionAt(openDoc.getText().length));
                     edit.replace(openDoc.uri, fullRange, text);
@@ -842,11 +838,8 @@ class KanbanViewProvider {
             return;
         }
         try {
-            console.log('[_handleMove]', { taskLine, targetSection, position, afterLine });
             let text = await this._readActiveFile();
-            console.log('[_handleMove] before:', text.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
             text = (0, serializer_1.moveTaskInContent)(text, taskLine, targetSection, position, afterLine);
-            console.log('[_handleMove] after:', text.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
             await this._writeActiveFile(text);
             await this._refresh();
         }
@@ -859,11 +852,8 @@ class KanbanViewProvider {
             return;
         }
         try {
-            console.log('[_handleMoveToParent]', { taskLine, parentLine, position, afterLine });
             let text = await this._readActiveFile();
-            console.log('[_handleMoveToParent] before:', text.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
             text = (0, serializer_1.moveTaskToParent)(text, taskLine, parentLine, position, afterLine);
-            console.log('[_handleMoveToParent] after:', text.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
             await this._writeActiveFile(text);
             await this._refresh();
         }
@@ -1180,7 +1170,6 @@ class KanbanViewProvider {
             // Update the webview to show the board
             this._view.webview.html = this._getHtmlForWebview(this._view.webview);
             await this._refresh();
-            this._startPeriodicRefresh();
             vscode.window.showInformationMessage('Todo board setup complete!');
         }
         catch (error) {
@@ -1196,9 +1185,11 @@ class KanbanViewProvider {
         vscode.window.showInformationMessage('You can open a markdown file anytime using the command "Todo Sidebar: Open Markdown File"');
     }
     dispose() {
-        this._stopPeriodicRefresh();
         if (this._refreshDebounceTimer) {
             clearTimeout(this._refreshDebounceTimer);
+        }
+        for (const disposable of this._perResolveDisposables) {
+            disposable.dispose();
         }
         for (const disposable of this._disposables) {
             disposable.dispose();
