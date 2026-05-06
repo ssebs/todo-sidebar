@@ -35,9 +35,14 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
 - **KanbanViewProvider.ts** - The main webview provider. Contains:
   - Loads HTML/CSS/JS from `webview.html` template file (or `welcome.html` when no file is configured)
   - Welcome wizard shown on first launch when `todoSidebar.activeFile` is not set
-  - Message handlers for webview-to-extension communication (`toggle`, `move`, `moveToParent`, `getColumns`, `openAtLine`, `addTask`, `editTaskText`, `addSubtask`, `selectFile`, `saveWizard`, `cancelWizard`)
-  - File watchers to auto-refresh when the markdown file changes (set up only once to avoid duplicates)
+  - Message handlers for webview-to-extension communication (`toggle`, `move`, `moveToParent`, `getColumns`, `openAtLine`, `addTask`, `editTaskText`, `addSubtask`, `addTaskToSubCategory`, `undo`, `redo`, `deleteTask`, `hideSection`, `editStart`/`editEnd`, `selectFile`, `saveWizard`, `cancelWizard`)
+  - File watchers to auto-refresh when the markdown file changes (set up only once to avoid duplicates). Watches the active markdown file, `.vscode/settings.json`, and listens to `onDidChangeConfiguration` for `todoSidebar.activeFile` and `todoSidebar.hiddenSections`.
   - Drag-and-drop supports precise positioning with 'top', 'bottom', and 'after' positions using `afterLine` parameter
+  - Periodic refresh every 5 seconds while the panel is visible (catches external edits); paused when hidden
+  - Debounced (100ms) refresh on file watcher events; an `_ignoreNextFileChange` flag suppresses the watcher event triggered by our own writes
+  - `_isEditing` flag (set via `editStart`/`editEnd` messages) skips refreshes while the user is inline-editing a task, unless forced or a `_pendingEditLine` is set
+  - Serialized writes via `_isWriting` mutex + `_writeQueue` to prevent concurrent file modifications
+  - In-memory undo/redo history stack (max 50 entries) tracking full file content; cleared when switching files. `_isUndoRedo` flag prevents undo/redo writes from being pushed back onto the stack.
 
 - **webview.html** - Webview UI template containing:
   - HTML structure and CSS styles for the Kanban board interface
@@ -50,18 +55,25 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
   - `# Title` for board title
   - `> Quote` for board description (before first column)
   - `## Section` for columns (columns with "done" in title are marked `isDoneColumn`)
-  - `> Quote` after `## Section` for column description (before any tasks)
-  - `- [ ]` / `- [x]` for tasks with markdown checkboxes
-  - `- ☐` / `- ☑` for unicode checkboxes
+  - `> Quote` after `## Section` for column description (before any tasks or subcategories)
+  - `### Subheading` for subcategories within a column (tasks following a `###` are attached to that subcategory rather than the column root)
+  - `- [ ]` / `- [x]` for tasks with markdown checkboxes (also `*` bullets)
+  - `- ☐` / `- ☑` / `- ✓` / `- ✗` for unicode checkboxes
+  - `- text` plain bullets without checkboxes (rendered as items with `hasCheckbox: false`)
+  - `  - > text` nested quote items become non-checkbox children of the most recent task
   - Indentation-based parent/child task hierarchy (recursive, supports deep nesting)
+  - Normalizes CRLF/CR to LF before parsing
 
 - **serializer.ts** - Modifies markdown content:
-  - `toggleTaskInContent()` - Toggle checkbox state at a line
+  - `toggleTaskInContent()` - Toggle checkbox state at a line (handles both markdown and unicode checkboxes)
   - `moveTaskInContent()` - Move task (with children) to a column at top, bottom, or after a specific line
   - `moveTaskToParent()` - Nest a task under another task, handling re-indentation
-  - `addTaskToSection()` - Add a new task to a section
-  - `editTaskTextInContent()` - Edit task text in place
-  - `addSubtaskToParent()` - Add a subtask under a parent task
+  - `addTaskToSection()` - Add a new task to a section, returns `{ content, line }`
+  - `addTaskToSubCategory()` - Add a new task under a `###` subcategory within a section
+  - `addSubtaskToParent()` - Add a subtask under a parent task, returns `{ content, line }`
+  - `editTaskTextInContent()` - Edit task text in place (works for md checkbox, unicode checkbox, or plain bullet)
+  - `deleteTaskInContent()` - Delete a task and all its indented children
+  - `removeCheckboxFromTask()` - Strip the checkbox marker from a task line, leaving a plain bullet
   - All functions preserve line ending style (CRLF vs LF) from the original file
 
 - **welcome.html** - Welcome wizard UI shown on first launch. Contains:
@@ -85,9 +97,12 @@ This is a VSCode extension that renders a Kanban-style todo board in the sidebar
 
 ```typescript
 interface Task { text: string; checked: boolean; line: number; children: Task[]; hasCheckbox: boolean; }
-interface Column { title: string; description: string; line: number; isDoneColumn: boolean; tasks: Task[]; }
+interface SubCategory { title: string; line: number; tasks: Task[]; }
+interface Column { title: string; description: string; line: number; isDoneColumn: boolean; tasks: Task[]; subCategories: SubCategory[]; }
 interface Board { title: string; description: string; columns: Column[]; }
 ```
+
+Top-level tasks under a column live in `Column.tasks`. Tasks under a `### Subheading` live in the matching `SubCategory.tasks` (and are NOT also in `Column.tasks`). The "is this a top-level task" check used by toggle/done-handling considers both `Column.tasks` and `SubCategory.tasks` to be top-level.
 
 ### State Persistence
 
@@ -117,9 +132,11 @@ The selected markdown file path is persisted to `.vscode/settings.json` via the 
 - **Drag and drop**: Reorder tasks within columns, move between columns, or nest under parent tasks.
 - **Right-click task to move**: Right-click a task to show a context menu for moving it to any section (moves to top of target section).
 - **Right-click section to hide**: Right-click a section header to hide it from the board view (adds it to `hiddenSections` setting).
-- **Double-click to edit**: Double-click anywhere on a task box (not just the text) to enter inline edit mode.
-- **Add task**: Click "+" button next to column header to add a new task.
+- **Double-click to edit**: Double-click anywhere on a task box (not just the text) to enter inline edit mode. The webview sends `editStart`/`editEnd` so the extension can pause refreshes while editing.
+- **Add task**: Click "+" button next to column header to add a new task. Subcategories (`###`) get their own "+" to add tasks within that subcategory.
 - **Add subtask**: Click "+" button on a task to add a subtask beneath it.
+- **Delete task**: Sends `deleteTask` message; removes the task and all its indented children.
+- **Undo / Redo**: `undo` / `redo` messages walk the in-memory history stack of file contents (max 50 entries, cleared on file switch). This is independent of VSCode's editor undo.
 - **Open in editor**: Click arrow button to jump to task's line in the markdown file.
 
 ### Markdown Format
