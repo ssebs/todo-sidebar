@@ -5,11 +5,6 @@
 > Take it slow, fix bugs
 
 ### EPIC
-- [ ] Use [tutorial-gamemode-objects](PLAN-tut-gamemodeobject.md) system
-  - [x] Issues:
-    - [x] Shouldn't have to add tutoriallessson node under course & connect. instead just add nested resources...
-    - [x] TutorialLesson trigger is confusing, and step doesn't 
-    - [ ] How to start TutorialCourse? No event start circle...
 
 ### WIP
 
@@ -330,6 +325,12 @@
 - [ ] Add text chat
 
 ## Done ✅
+
+- [x] Use [tutorial-gamemode-objects](PLAN-tut-gamemodeobject.md) system
+  - [x] Issues:
+    - [x] Shouldn't have to add tutoriallessson node under course & connect. instead just add nested resources...
+    - [x] TutorialLesson trigger is confusing, and step doesn't 
+    - [ ] How to start TutorialCourse? No event start circle...
 
 - [x] item
   - [ ] subitem
