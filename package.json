@@ -43,6 +43,18 @@
       {
         "command": "todoSidebar.refresh",
         "title": "Todo Sidebar: Refresh"
+      },
+      {
+        "command": "todoSidebar.markDoneAtCursor",
+        "title": "Todo Sidebar: Mark Task at Cursor as Done"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "todoSidebar.markDoneAtCursor",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d",
+        "when": "editorTextFocus && resourceExtname == .md"
       }
     ],
     "configuration": {
@@ -59,6 +71,12 @@
           "enum": ["move", "delete"],
           "default": "move",
           "description": "Action to perform when a top-level task is marked as complete: 'move' to Done column or 'delete' entirely",
+          "scope": "resource"
+        },
+        "todoSidebar.shouldMoveWhenCheckingInEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "When enabled, checking a top-level task's checkbox directly in the markdown editor (e.g. via the markdown-inline-editor click-to-toggle, or by manually changing [ ] to [x]) will move the task to the Done section, mirroring the sidebar behavior. The todoSidebar.markDoneAtCursor command is unaffected.",
           "scope": "resource"
         },
         "todoSidebar.hiddenSections": {

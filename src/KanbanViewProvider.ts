@@ -37,6 +37,10 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
   // Flag to ignore file watcher events during our own writes
   private _ignoreNextFileChange: boolean = false;
 
+  // Per-line debounce for auto-mark-done from onDidChangeTextDocument
+  // Maps 1-indexed line -> timestamp of last auto-trigger; prevents re-entrancy loops
+  private _recentlyAutoToggled: Map<number, number> = new Map();
+
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
   public resolveWebviewView(
@@ -235,6 +239,66 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
         }
       })
     );
+
+    // Auto-mark-done on text edits: when a top-level task line transitions to checked
+    // (e.g. via the markdown-inline-editor click-to-toggle, or manual edit), trigger
+    // the same logic as todoSidebar.markDoneAtCursor so it moves to the Done section.
+    this._disposables.push(
+      vscode.workspace.onDidChangeTextDocument((event) => {
+        if (!this._activeFileUri) {
+          return;
+        }
+        if (event.document.uri.toString() !== this._activeFileUri.toString()) {
+          return;
+        }
+        const cfg = vscode.workspace.getConfiguration('todoSidebar');
+        if (!cfg.get<boolean>('shouldMoveWhenCheckingInEditor', true)) {
+          return;
+        }
+
+        for (const change of event.contentChanges) {
+          // Filter out bulk changes (file reloads from our own writes, undo, paste);
+          // a real toggle is a 1-3 char insert.
+          if (change.text.length > 6) {
+            continue;
+          }
+          // The change text must include a "checked" character
+          if (!/[xX☑✓]/.test(change.text)) {
+            continue;
+          }
+
+          const lineIndex = change.range.start.line;
+          const line = lineIndex + 1; // serializer uses 1-indexed
+          const lineText = event.document.lineAt(lineIndex).text;
+
+          // Top-level only: no leading whitespace before the bullet
+          if (!/^[-*]\s+(\[[xX]\]|[☑✓])\s+\S/.test(lineText)) {
+            continue;
+          }
+
+          // Per-line debounce: ignore if we already auto-toggled this line within 2s
+          const last = this._recentlyAutoToggled.get(line) ?? 0;
+          if (Date.now() - last < 2000) {
+            continue;
+          }
+          this._recentlyAutoToggled.set(line, Date.now());
+
+          void this._autoMarkDone(line, event.document);
+        }
+      })
+    );
+  }
+
+  private async _autoMarkDone(line: number, doc: vscode.TextDocument) {
+    try {
+      // Persist the just-made edit so disk state matches before we re-read+write
+      if (doc.isDirty) {
+        await doc.save();
+      }
+      await this._handleToggle(line, true);
+    } catch (e) {
+      console.error('Auto mark-done failed:', e);
+    }
   }
 
   private _reloadActiveFileFromConfig() {
@@ -384,6 +448,30 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
     await this._refresh();
   }
 
+  public async markDoneAtCursor() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showInformationMessage('Todo Sidebar: no active editor');
+      return;
+    }
+    if (!this._activeFileUri) {
+      vscode.window.showInformationMessage('Todo Sidebar: no active todo file configured');
+      return;
+    }
+    if (editor.document.uri.toString() !== this._activeFileUri.toString()) {
+      vscode.window.showInformationMessage('Todo Sidebar: active editor is not the configured todo file');
+      return;
+    }
+
+    // Persist any unsaved edits so the on-disk + in-memory state we operate on matches the editor
+    if (editor.document.isDirty) {
+      await editor.document.save();
+    }
+
+    const line = editor.selection.active.line + 1; // 1-indexed
+    await this._handleToggle(line, true);
+  }
+
   private async _readActiveFile(): Promise<string> {
     if (!this._activeFileUri) {
       return '';
@@ -428,7 +516,25 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
         // Set flag to ignore the file watcher event we're about to trigger
         this._ignoreNextFileChange = true;
-        await vscode.workspace.fs.writeFile(this._activeFileUri!, Buffer.from(text, 'utf-8'));
+
+        // If the file is open in an editor, edit through the doc buffer so the
+        // editor stays in sync (avoids "file on disk is newer" save conflicts).
+        // Otherwise, write directly to disk.
+        const openDoc = vscode.workspace.textDocuments.find(
+          d => d.uri.toString() === this._activeFileUri!.toString()
+        );
+        if (openDoc) {
+          const edit = new vscode.WorkspaceEdit();
+          const fullRange = new vscode.Range(
+            openDoc.positionAt(0),
+            openDoc.positionAt(openDoc.getText().length)
+          );
+          edit.replace(openDoc.uri, fullRange, text);
+          await vscode.workspace.applyEdit(edit);
+          await openDoc.save();
+        } else {
+          await vscode.workspace.fs.writeFile(this._activeFileUri!, Buffer.from(text, 'utf-8'));
+        }
         resolve();
       };
 
@@ -465,8 +571,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
     this._isUndoRedo = true;
     try {
-      this._ignoreNextFileChange = true;
-      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(previousContent, 'utf-8'));
+      await this._writeActiveFile(previousContent);
       await this._refresh();
     } finally {
       this._isUndoRedo = false;
@@ -483,8 +588,7 @@ export class KanbanViewProvider implements vscode.WebviewViewProvider {
 
     this._isUndoRedo = true;
     try {
-      this._ignoreNextFileChange = true;
-      await vscode.workspace.fs.writeFile(this._activeFileUri, Buffer.from(nextContent, 'utf-8'));
+      await this._writeActiveFile(nextContent);
       await this._refresh();
     } finally {
       this._isUndoRedo = false;

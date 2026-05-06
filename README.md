@@ -21,6 +21,7 @@ A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed
 - **Inline editing** - Double-click any task to edit its text
 - **Checkbox support** - Works with `- [ ]`/`- [x]` and unicode `☐`/`☑` checkboxes
 - **Auto-move to Done** - Checking a task automatically moves it to your Done column
+- **Mark done from the editor** - Use the `Todo Sidebar: Mark Task at Cursor as Done` command (default `Ctrl+Alt+D` / `Cmd+Alt+D` on Mac) to mark the task on the cursor's line and move it to Done. Toggling a top-level checkbox directly in the markdown text (e.g. via [markdown-inline-editor](https://marketplace.visualstudio.com/items?itemName=SeardnaSchmid.markdown-inline-editor) click-to-toggle, or by manually changing `[ ]` to `[x]`) also moves the task — toggle this off via `todoSidebar.shouldMoveWhenCheckingInEditor`.
 - **Keep the rest of your MD file untouched** - Only tasks you drag / interact with will move, other markdown will stay.
 - **History support** (ctrl+z, ctrl+y)
 
@@ -58,6 +59,7 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
 {
   "todoSidebar.activeFile": "./TODO.md",
   "todoSidebar.onDoneAction": "move",
+  "todoSidebar.shouldMoveWhenCheckingInEditor": true,
   "todoSidebar.hiddenSections": ["Done", "Hidden*"]
 }
 ```
@@ -70,6 +72,11 @@ You can customize the behavior by adding settings to your workspace's `.vscode/s
   - `"move"` (default): Toggles checkbox to `[x]` and moves task to Done column
   - `"delete"`: Immediately deletes task and all its children. No confirmation dialog - use Ctrl+Z (Cmd+Z on Mac) to undo if needed.
   - Note: Only affects top-level tasks. Subtasks always just toggle in place.
+
+- **todoSidebar.shouldMoveWhenCheckingInEditor** (boolean): When enabled, checking a top-level task's checkbox directly in the markdown editor (e.g. via [markdown-inline-editor](https://marketplace.visualstudio.com/items?itemName=SeardnaSchmid.markdown-inline-editor) click-to-toggle, or by manually changing `[ ]` to `[x]`) will move the task to the Done section, mirroring the sidebar behavior. Defaults to `true`.
+  - Only fires for top-level tasks (no leading whitespace before the bullet); subtasks toggle in place.
+  - Respects `todoSidebar.onDoneAction` (`"move"` or `"delete"`).
+  - The `Todo Sidebar: Mark Task at Cursor as Done` command is unaffected by this setting — it always moves.
 
 - **todoSidebar.hiddenSections** (array of strings): List of section names (H2 headers) to hide from the board view. Defaults to `[]` (empty array, all sections visible).
   - Example: `["Done", "Archive"]` will hide sections titled "Done" and "Archive"

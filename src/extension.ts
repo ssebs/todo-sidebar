@@ -38,7 +38,12 @@ export function activate(context: vscode.ExtensionContext) {
 		await kanbanProvider.refresh();
 	});
 
-	context.subscriptions.push(openFileCommand, refreshCommand);
+	// Mark the task on the cursor line as done (and move to Done section per onDoneAction)
+	const markDoneCommand = vscode.commands.registerCommand('todoSidebar.markDoneAtCursor', async () => {
+		await kanbanProvider.markDoneAtCursor();
+	});
+
+	context.subscriptions.push(openFileCommand, refreshCommand, markDoneCommand);
 }
 
 export function deactivate() {
