@@ -1,5 +1,7 @@
 # Todo Sidebar
 
+[![.github/workflows/main.yml](https://github.com/ssebs/todo-sidebar/actions/workflows/main.yml/badge.svg)](https://github.com/ssebs/todo-sidebar/actions/workflows/main.yml)
+
 A VSCode extension that renders a Kanban-style todo board in the sidebar, parsed directly from Markdown files.
 
 > Sorry, this is a vibe-coded app. I just wanted the feature 🤷‍♀️
